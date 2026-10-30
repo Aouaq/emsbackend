@@ -4,7 +4,7 @@ object EmoncmsKey {
 
     private val ALLOWED = Regex("^[A-Za-z0-9]{16,64}$")
 
-    fun normalize(raw: String): String = raw.trim()
+    fun normalize(raw: String): String = raw.filterNot { it.isWhitespace() }
 
     fun isValid(raw: String): Boolean = ALLOWED.matches(normalize(raw))
 

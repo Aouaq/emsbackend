@@ -76,6 +76,33 @@ class AdminManagementIntegrationTest : ApiTestSupport() {
     }
 
     @Test
+    fun `normalizes whitespace around Emoncms keys`() {
+        val admin = adminLogin()
+        val auth = "Bearer ${admin.accessToken}"
+        val resource = uniqueResource()
+        val key = uniqueKey()
+
+        mockMvc.perform(
+            post("/api/admin/keys")
+                .header(HttpHeaders.AUTHORIZATION, auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"resource":"$resource","emoncmsKey":"  $key\n"}""")
+        ).andExpect(status().isCreated)
+            .andExpect(jsonPath("$.keyHint").value(key.take(4) + "\u2026"))
+
+        val email = uniqueEmail("trimmed")
+        registerAndVerify(email)
+        val client = login(email)
+        mockMvc.perform(
+            post("/api/me/keys")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer ${client.accessToken}")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"key":"\t$key \n"}""")
+        ).andExpect(status().isCreated)
+            .andExpect(jsonPath("$.resource").value(resource))
+    }
+
+    @Test
     fun `lists and unlinks linked clients`() {
         val admin = adminLogin()
         val auth = "Bearer ${admin.accessToken}"

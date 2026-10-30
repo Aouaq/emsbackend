@@ -8,10 +8,7 @@ import jakarta.validation.constraints.Size
 @Schema(description = "Payload for registering an Emoncms account")
 data class AccessKeyRequest(
     @field:NotBlank
-    @field:Pattern(
-        regexp = "[A-Za-z0-9]{16,64}",
-        message = "the Emoncms key must be 16 to 64 letters or digits"
-    )
+    @field:Size(max = 256)
     @field:Schema(
         description = "Emoncms read API key from the account's QR code or dashboard",
         example = "3ddd9a580253f6c9aab6298f754cf0fd"
