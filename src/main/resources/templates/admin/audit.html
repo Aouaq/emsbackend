@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Audit Log')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav('audit')}"></nav>
+<main>
+    <h1>Audit Log</h1>
+
+    <div class="card">
+        <table>
+            <thead>
+            <tr>
+                <th>When</th>
+                <th>Event</th>
+                <th>Actor</th>
+                <th>Target</th>
+                <th>Resource</th>
+                <th>IP</th>
+                <th>Details</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="entry : ${audit.content}">
+                <td class="muted" th:text="${entry.createdAt}"></td>
+                <td><code th:text="${entry.eventType}"></code></td>
+                <td>
+                    <span th:text="${entry.actorEmail ?: '-'}"></span>
+                    <span class="muted" th:if="${entry.actorUserId}" th:text="|#${entry.actorUserId}|"></span>
+                </td>
+                <td>
+                    <span th:text="${entry.targetEmail ?: '-'}"></span>
+                    <span class="muted" th:if="${entry.targetUserId}" th:text="|#${entry.targetUserId}|"></span>
+                </td>
+                <td th:text="${entry.resource ?: '-'}"></td>
+                <td class="muted" th:text="${entry.ipAddress ?: '-'}"></td>
+                <td class="muted" th:text="${entry.details ?: ''}"></td>
+            </tr>
+            <tr th:if="${audit.content.isEmpty()}">
+                <td colspan="7" class="muted" style="text-align:center;">No audit entries.</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <p class="muted" style="margin-top:1rem;">
+        Page <span th:text="${audit.page + 1}">1</span>
+        of <span th:text="${audit.totalPages}">1</span>
+        (<span th:text="${audit.totalElements}">0</span> entries)
+        <a th:if="${audit.page > 0}" th:href="@{/admin/audit(page=${audit.page - 1})}" style="margin-left:1rem;">Previous</a>
+        <a th:if="${audit.page + 1 < audit.totalPages}" th:href="@{/admin/audit(page=${audit.page + 1})}" style="margin-left:1rem;">Next</a>
+    </p>
+</main>
+</body>
+</html>

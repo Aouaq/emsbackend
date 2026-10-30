@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Users')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav('users')}"></nav>
+<main>
+    <h1>Users</h1>
+
+    <div class="alert alert-ok" th:if="${message}" th:text="${message}"></div>
+    <div class="alert alert-err" th:if="${errorMessage}" th:text="${errorMessage}"></div>
+
+    <div class="card">
+        <table>
+            <thead>
+            <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Linked Keys</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="user : ${users}">
+                <td>
+                    <span th:text="${user.email}"></span><br/>
+                    <span class="muted" th:text="${user.provider}"></span>
+                </td>
+                <td th:text="${user.fullName ?: '-'}"></td>
+                <td>
+                    <form th:action="@{/admin/users/{id}/role(id=${user.id})}" method="post">
+                        <select name="role" style="padding:0.25rem;">
+                            <option value="CLIENT" th:selected="${user.role == 'CLIENT'}">CLIENT</option>
+                            <option value="ADMIN" th:selected="${user.role == 'ADMIN'}">ADMIN</option>
+                        </select>
+                        <button type="submit" class="btn"
+                                style="background:#27476b; padding:0.3rem 0.6rem; font-size:0.8rem;">Save</button>
+                    </form>
+                </td>
+                <td>
+                    <span class="badge ok" th:if="${user.verified}">VERIFIED</span>
+                    <span class="badge off" th:unless="${user.verified}">UNVERIFIED</span>
+                    <span class="badge off" th:if="${user.disabled}">DISABLED</span>
+                </td>
+                <td>
+                    <span th:if="${user.accessKeys.isEmpty()}" class="muted">None</span>
+                    <code th:each="key : ${user.accessKeys}" th:text="${key}"
+                          style="display:block; font-size:0.8rem;">resource</code>
+                </td>
+                <td>
+                    <form th:if="${!user.disabled}" th:action="@{/admin/users/{id}/disable(id=${user.id})}"
+                          method="post" style="margin-bottom:0.35rem;"
+                          onsubmit="return confirm('Disable this user and revoke their sessions?');">
+                        <button type="submit" class="btn"
+                                style="background:#9b1c20; padding:0.3rem 0.6rem; font-size:0.8rem;">Disable</button>
+                    </form>
+                    <form th:if="${user.disabled}" th:action="@{/admin/users/{id}/enable(id=${user.id})}"
+                          method="post" style="margin-bottom:0.35rem;">
+                        <button type="submit" class="btn"
+                                style="background:#116632; padding:0.3rem 0.6rem; font-size:0.8rem;">Enable</button>
+                    </form>
+                    <form th:action="@{/admin/users/{id}/revoke-sessions(id=${user.id})}" method="post">
+                        <button type="submit" class="btn"
+                                style="background:#27476b; padding:0.3rem 0.6rem; font-size:0.8rem;">Revoke Sessions</button>
+                    </form>
+                </td>
+            </tr>
+            <tr th:if="${users.isEmpty()}">
+                <td colspan="6" class="muted" style="text-align:center;">No users found.</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>

@@ -19,6 +19,10 @@ data class AdminUserResponse(
     val verified: Boolean,
     @field:Schema(description = "Creation timestamp (UTC)")
     val createdAt: Instant,
+    @field:Schema(description = "Last successful login (UTC)", nullable = true)
+    val lastLoginAt: Instant? = null,
+    @field:Schema(description = "Whether the account is disabled", example = "false")
+    val disabled: Boolean = false,
     @field:Schema(description = "Values of the access keys linked to this user")
     val accessKeys: List<String> = emptyList()
 )

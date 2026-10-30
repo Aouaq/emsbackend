@@ -12,8 +12,21 @@
     <div class="alert alert-ok" th:if="${message}" th:text="${message}"></div>
     <div class="alert alert-err" th:if="${errorMessage}" th:text="${errorMessage}"></div>
 
+    <div class="card" style="margin-bottom:1rem;">
+        <strong>Overview</strong>
+        <p class="muted" style="margin:0.5rem 0 0;">
+            <span th:text="${stats.users.total}">0</span> users
+            (<span th:text="${stats.users.clients}">0</span> clients,
+            <span th:text="${stats.users.admins}">0</span> admins,
+            <span th:text="${stats.users.disabled}">0</span> disabled) &middot;
+            <span th:text="${stats.accessKeys.total}">0</span> Emoncms accounts
+            (<span th:text="${stats.accessKeys.active}">0</span> active) &middot;
+            <span th:text="${stats.links}">0</span> client links
+        </p>
+    </div>
+
     <p class="muted">
-        <span th:text="${totalKeys}">0</span> total keys ·
+        <span th:text="${totalKeys}">0</span> total keys &middot;
         <span th:text="${activeKeys}">0</span> active
     </p>
 
@@ -25,13 +38,16 @@
                 <th>Resource</th>
                 <th>Status</th>
                 <th>Linked Clients</th>
-                <th>Created</th>
+                <th>Updated</th>
                 <th>Actions</th>
             </tr>
             </thead>
             <tbody>
             <tr th:each="key : ${keys}">
-                <td><code th:text="${key.keyHint}"></code><br/><span class="muted" th:text="${key.description}"></span></td>
+                <td>
+                    <code th:text="${key.keyHint}"></code><br/>
+                    <span class="muted" th:text="${key.description}"></span>
+                </td>
                 <td th:text="${key.resource}"></td>
                 <td>
                     <span class="badge ok" th:if="${key.isActive}">ACTIVE</span>
@@ -41,8 +57,19 @@
                     <span th:if="${key.linkedClients == 0}" class="muted">None</span>
                     <span th:if="${key.linkedClients > 0}" th:text="${key.linkedClients} + ' client(s)'"></span>
                 </td>
-                <td class="muted" th:text="${key.createdAt}"></td>
+                <td class="muted" th:text="${key.updatedAt}"></td>
                 <td>
+                    <form th:action="@{/admin/keys/{id}/toggle(id=${key.id})}" method="post" style="margin-bottom:0.4rem;">
+                        <button type="submit" class="btn"
+                                style="background:#27476b; padding:0.3rem 0.7rem; font-size:0.8rem;"
+                                th:text="${key.isActive} ? 'Deactivate' : 'Activate'">Deactivate</button>
+                    </form>
+                    <form th:action="@{/admin/keys/{id}/replace(id=${key.id})}" method="post" style="margin-bottom:0.4rem;">
+                        <input type="password" name="emoncmsKey" placeholder="New Emoncms key"
+                               autocomplete="off" style="width:100%; padding:0.3rem; margin-bottom:0.25rem;"/>
+                        <button type="submit" class="btn"
+                                style="background:#0b5cad; padding:0.3rem 0.7rem; font-size:0.8rem;">Replace Key</button>
+                    </form>
                     <form th:action="@{/admin/keys/{id}/delete(id=${key.id})}" method="post"
                           onsubmit="return confirm('Delete this access key? Linked clients will lose access immediately.');">
                         <button type="submit" class="btn"

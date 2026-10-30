@@ -111,6 +111,7 @@ class AuthController(
     @ApiResponses(
         ApiResponse(responseCode = "200", description = "New tokens issued"),
         ApiResponse(responseCode = "401", description = "Invalid, expired or already-used refresh token"),
+        ApiResponse(responseCode = "403", description = "Account is disabled"),
         ApiResponse(responseCode = "429", description = "Rate limit exceeded")
     )
     @PostMapping("/refresh")

@@ -26,7 +26,8 @@ class MeService(
     private val refreshTokenService: RefreshTokenService,
     private val rateLimitService: RateLimitService,
     private val rateLimitProperties: RateLimitProperties,
-    private val auditService: AuditService
+    private val auditService: AuditService,
+    private val accountAccessService: AccountAccessService
 ) {
 
     fun get(userId: Long): MeResponse = requireUser(userId).toMeResponse()
@@ -148,6 +149,7 @@ class MeService(
 
         user.accessKeys.add(accessKey)
         userRepository.save(user)
+        accountAccessService.evictUser(user.id)
         auditService.record(
             "KEY_LINKED",
             actorUserId = user.id,
@@ -176,6 +178,7 @@ class MeService(
 
         user.accessKeys.remove(accessKey)
         userRepository.save(user)
+        accountAccessService.evictUser(user.id)
         auditService.record(
             "KEY_UNLINKED",
             actorUserId = user.id,

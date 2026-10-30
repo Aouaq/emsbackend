@@ -40,7 +40,8 @@
     <span class="brand">ElectricWave Admin</span>
     <a th:href="@{/admin/dashboard}" th:classappend="${active == 'dashboard'} ? 'active'" href="#">Dashboard</a>
     <a th:href="@{/admin/keys/new}" th:classappend="${active == 'new-key'} ? 'active'" href="#">Add Key</a>
-    <a th:href="@{/admin/clients}" th:classappend="${active == 'clients'} ? 'active'" href="#">Clients</a>
+    <a th:href="@{/admin/users}" th:classappend="${active == 'users'} ? 'active'" href="#">Users</a>
+    <a th:href="@{/admin/audit}" th:classappend="${active == 'audit'} ? 'active'" href="#">Audit</a>
     <a th:href="@{/swagger-ui.html}" target="_blank" rel="noopener" href="#">API Docs</a>
     <form th:action="@{/admin/logout}" method="post">
         <button type="submit" class="btn" style="background:#27476b; padding:0.35rem 0.9rem;">Log out</button>
