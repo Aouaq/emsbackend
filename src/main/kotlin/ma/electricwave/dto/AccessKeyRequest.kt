@@ -5,27 +5,29 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 
-@Schema(description = "Payload for creating an access key")
+@Schema(description = "Payload for registering an Emoncms account")
 data class AccessKeyRequest(
-    @field:Size(max = 255)
-    @field:Pattern(regexp = "[A-Za-z0-9_.-]*", message = "only letters, digits, '_', '.' and '-' are allowed")
-    @field:Schema(
-        description = "Optional explicit key value; a random ew_<hex> value is generated when omitted",
-        example = "ew_billing_02",
-        nullable = true
+    @field:NotBlank
+    @field:Pattern(
+        regexp = "[A-Za-z0-9]{16,64}",
+        message = "the Emoncms key must be 16 to 64 letters or digits"
     )
-    val keyValue: String? = null,
+    @field:Schema(
+        description = "Emoncms read API key from the account's QR code or dashboard",
+        example = "3ddd9a580253f6c9aab6298f754cf0fd"
+    )
+    val emoncmsKey: String = "",
 
     @field:NotBlank
-    @field:Size(max = 128)
-    @field:Pattern(regexp = "[a-z0-9-]+", message = "resource must be lowercase kebab or snake case")
-    @field:Schema(description = "Resource identifier protected by this key", example = "billing")
+    @field:Size(max = 100)
+    @field:Pattern(regexp = "[a-z0-9][a-z0-9-]*", message = "resource must be a lowercase slug")
+    @field:Schema(description = "Resource identifier (Emoncms account slug)", example = "ctm01")
     val resource: String = "",
 
-    @field:Size(max = 512)
-    @field:Schema(description = "Optional description", example = "Invoices and payments", nullable = true)
+    @field:Size(max = 255)
+    @field:Schema(description = "Optional description", example = "Home consumption meter", nullable = true)
     val description: String? = null,
 
-    @field:Schema(description = "Whether the key can be used immediately", example = "true")
+    @field:Schema(description = "Whether the account can be claimed immediately", example = "true")
     val isActive: Boolean = true
 )

@@ -9,9 +9,10 @@
         <div class="alert alert-err" th:if="${errorMessage}" th:text="${errorMessage}"></div>
         <form th:action="@{/admin/keys}" th:object="${request}" method="post">
             <div class="field">
-                <label for="keyValue">Key value <span class="muted">(optional — auto-generated when empty)</span></label>
-                <input type="text" id="keyValue" th:field="*{keyValue}" placeholder="ew_billing_02"/>
-                <div class="error" th:if="${#fields.hasErrors('keyValue')}" th:errors="*{keyValue}"></div>
+                <label for="emoncmsKey">Emoncms read key</label>
+                <input type="password" id="emoncmsKey" th:field="*{emoncmsKey}"
+                       placeholder="16 to 64 letters or digits" autocomplete="off"/>
+                <div class="error" th:if="${#fields.hasErrors('emoncmsKey')}" th:errors="*{emoncmsKey}"></div>
             </div>
             <div class="field">
                 <label for="resource">Resource</label>

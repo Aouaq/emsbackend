@@ -58,7 +58,7 @@ class AdminPageController(private val adminService: AdminService) {
             val response = adminService.createKey(request)
             redirectAttributes.addFlashAttribute(
                 "message",
-                "Access key '${response.keyValue}' created successfully."
+                "Access key '${response.resource}' created successfully."
             )
             "redirect:/admin/dashboard"
         } catch (ex: ApiException) {

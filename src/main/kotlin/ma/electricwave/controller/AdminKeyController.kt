@@ -26,23 +26,23 @@ import org.springframework.web.bind.annotation.RestController
 class AdminKeyController(private val adminService: AdminService) {
 
     @Operation(
-        summary = "Create an access key",
-        description = "Creates a new access key. When keyValue is omitted a random ew_<hex> value is generated. " +
-            "Requires ROLE_ADMIN."
+        summary = "Register an Emoncms account",
+        description = "Stores a hashed and encrypted copy of the account's Emoncms read key. " +
+            "The plaintext key is never returned. Requires ROLE_ADMIN."
     )
     @ApiResponses(
-        ApiResponse(responseCode = "201", description = "Access key created"),
+        ApiResponse(responseCode = "201", description = "Account registered"),
         ApiResponse(responseCode = "400", description = "Validation failed"),
         ApiResponse(responseCode = "403", description = "Caller is not an admin"),
-        ApiResponse(responseCode = "409", description = "An access key with this value already exists")
+        ApiResponse(responseCode = "409", description = "The key or resource is already registered")
     )
     @PostMapping("/keys")
     fun createKey(@Valid @RequestBody request: AccessKeyRequest): ResponseEntity<AccessKeyResponse> =
         ResponseEntity.status(201).body(adminService.createKey(request))
 
     @Operation(
-        summary = "List all access keys",
-        description = "Returns every access key with its status, resource and the emails of linked client users. " +
+        summary = "List all registered Emoncms accounts",
+        description = "Returns every account with its status, resource, key hint and linked-client count. " +
             "Requires ROLE_ADMIN."
     )
     @ApiResponse(responseCode = "200", description = "Access keys with linked clients")
@@ -50,9 +50,9 @@ class AdminKeyController(private val adminService: AdminService) {
     fun listKeys(): List<AccessKeyResponse> = adminService.listKeys()
 
     @Operation(
-        summary = "Delete an access key",
-        description = "Permanently deletes the access key. Links to client users are removed automatically, " +
-            "so they immediately lose access to the key's resource. Requires ROLE_ADMIN."
+        summary = "Delete a registered Emoncms account",
+        description = "Permanently deletes the account. Client links are removed automatically, so they " +
+            "immediately lose access to the resource. Requires ROLE_ADMIN."
     )
     @ApiResponses(
         ApiResponse(responseCode = "204", description = "Access key deleted"),
@@ -67,7 +67,7 @@ class AdminKeyController(private val adminService: AdminService) {
 
     @Operation(
         summary = "List client users",
-        description = "Returns all CLIENT accounts with their verification status and linked access keys. " +
+        description = "Returns all CLIENT accounts with their verification status and linked resources. " +
             "Requires ROLE_ADMIN."
     )
     @ApiResponse(responseCode = "200", description = "Client accounts")

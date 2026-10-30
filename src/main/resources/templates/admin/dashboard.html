@@ -31,17 +31,15 @@
             </thead>
             <tbody>
             <tr th:each="key : ${keys}">
-                <td><code th:text="${key.keyValue}"></code><br/><span class="muted" th:text="${key.description}"></span></td>
+                <td><code th:text="${key.keyHint}"></code><br/><span class="muted" th:text="${key.description}"></span></td>
                 <td th:text="${key.resource}"></td>
                 <td>
                     <span class="badge ok" th:if="${key.isActive}">ACTIVE</span>
                     <span class="badge off" th:unless="${key.isActive}">INACTIVE</span>
                 </td>
                 <td>
-                    <span th:if="${key.linkedClients.isEmpty()}" class="muted">None</span>
-                    <code th:each="client : ${key.linkedClients}"
-                          th:text="${client} + '\n'"
-                          style="display:block; font-size:0.8rem;">client@example.com</code>
+                    <span th:if="${key.linkedClients == 0}" class="muted">None</span>
+                    <span th:if="${key.linkedClients > 0}" th:text="${key.linkedClients} + ' client(s)'"></span>
                 </td>
                 <td class="muted" th:text="${key.createdAt}"></td>
                 <td>

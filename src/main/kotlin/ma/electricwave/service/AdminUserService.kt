@@ -64,6 +64,6 @@ class AdminUserService(
         provider = authProvider.name,
         verified = isVerified,
         createdAt = createdAt,
-        accessKeys = accessKeys.map { it.keyValue }
+        accessKeys = accessKeys.map { it.resource }
     )
 }

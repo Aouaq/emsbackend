@@ -7,9 +7,13 @@ import java.util.Optional
 
 interface AccessKeyRepository : JpaRepository<AccessKey, Long> {
 
-    fun findByKeyValue(keyValue: String): Optional<AccessKey>
+    fun findByKeyHash(keyHash: String): Optional<AccessKey>
 
-    fun existsByKeyValue(keyValue: String): Boolean
+    fun existsByKeyHash(keyHash: String): Boolean
+
+    fun existsByResource(resource: String): Boolean
+
+    fun findByResource(resource: String): Optional<AccessKey>
 
     fun findAllByIsActiveTrueOrderByResource(): List<AccessKey>
 

@@ -34,6 +34,11 @@ This file records every assumption or deviation from the v1 specification.
 - Emoncms keys are stored as a SHA-256 hash for matching and as an AES-256-GCM
   encrypted copy for the gateway. Responses expose only a short hint and whether
   a key is configured.
+- `key_hash` is a `char(64)` column as specified. Hibernate is told to expect a
+  CHAR JDBC type (`@JdbcTypeCode(SqlTypes.CHAR)`) so schema validation succeeds.
+- The development profile contains a fixed base64 32-byte crypto master key so
+  encrypted keys survive restarts locally. Outside `dev`, `APP_CRYPTO_MASTER_KEY`
+  is mandatory; a blank or non-32-byte value aborts startup.
 - Access keys are administrator-provisioned. Creating or promoting an
   administrator is allowed for administrators, subject to the guards described
   in the specification (no self role changes, at least one active administrator

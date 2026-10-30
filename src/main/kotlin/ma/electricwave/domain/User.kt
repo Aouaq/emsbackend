@@ -39,6 +39,12 @@ class User(
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant = Instant.now(),
 
+    @Column(name = "disabled_at")
+    var disabledAt: Instant? = null,
+
+    @Column(name = "last_login_at")
+    var lastLoginAt: Instant? = null,
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0

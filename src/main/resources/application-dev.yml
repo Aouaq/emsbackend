@@ -9,6 +9,8 @@ spring:
       on-profile: dev
 
 app:
+  crypto:
+    master-key: ${APP_CRYPTO_MASTER_KEY:ZGV2LW9ubHktY3J5cHRvLW1hc3Rlci1rZXktMzJieXQ=}
   jwt:
     secret: ${APP_JWT_SECRET:dev-only-secret-change-me-with-at-least-32-bytes!!}
   admin:

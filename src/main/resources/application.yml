@@ -79,6 +79,10 @@ server:
 # Application specific settings
 # =============================================================================
 app:
+  # AES-256-GCM master key, base64 encoded, exactly 32 bytes.
+  crypto:
+    master-key: ${APP_CRYPTO_MASTER_KEY:}
+
   # JWT: HS256. The secret must be at least 32 bytes and has no default.
   jwt:
     secret: ${APP_JWT_SECRET:}
