@@ -1,0 +1,26 @@
+# =============================================================================
+# Development profile. Every value here is a safe local default; environment
+# variables still take precedence.
+# =============================================================================
+
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+app:
+  jwt:
+    secret: ${APP_JWT_SECRET:dev-only-secret-change-me-with-at-least-32-bytes!!}
+  admin:
+    email: ${APP_ADMIN_EMAIL:admin@electricwave.local}
+    password: ${APP_ADMIN_PASSWORD:admin123}
+  mail:
+    enabled: ${APP_MAIL_ENABLED:false}
+  auth:
+    expose-verification-code: ${APP_AUTH_EXPOSE_VERIFICATION_CODE:true}
+
+springdoc:
+  api-docs:
+    enabled: ${APP_OPENAPI_ENABLED:true}
+  swagger-ui:
+    enabled: ${APP_OPENAPI_ENABLED:true}

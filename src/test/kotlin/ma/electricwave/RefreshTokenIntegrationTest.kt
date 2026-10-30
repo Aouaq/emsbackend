@@ -24,7 +24,7 @@ class RefreshTokenIntegrationTest : ApiTestSupport() {
         ).andExpect(status().isOk)
             .andExpect(jsonPath("$.token").isNotEmpty)
             .andExpect(jsonPath("$.refreshToken").isNotEmpty)
-            .andExpect(jsonPath("$.expiresIn").value(1800))
+            .andExpect(jsonPath("$.expiresIn").value(900))
     }
 
     @Test

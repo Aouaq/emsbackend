@@ -1,7 +1,6 @@
 package ma.electricwave.service
 
 import ma.electricwave.config.RateLimitProperties
-import ma.electricwave.domain.AccessKey
 import ma.electricwave.domain.AuthProvider
 import ma.electricwave.domain.Role
 import ma.electricwave.domain.User
@@ -16,7 +15,6 @@ import ma.electricwave.dto.TokenResponse
 import ma.electricwave.dto.VerifyRequest
 import ma.electricwave.dto.VerifyResponse
 import ma.electricwave.exception.ApiException
-import ma.electricwave.repository.AccessKeyRepository
 import ma.electricwave.repository.UserRepository
 import ma.electricwave.security.GoogleTokenVerifier
 import ma.electricwave.security.JwtProperties
@@ -33,7 +31,6 @@ import java.time.Duration
 @Service
 class AuthService(
     private val userRepository: UserRepository,
-    private val accessKeyRepository: AccessKeyRepository,
     private val passwordEncoder: PasswordEncoder,
     private val verificationCodeService: VerificationCodeService,
     private val mailService: MailService,
@@ -69,7 +66,6 @@ class AuthService(
             authProvider = AuthProvider.LOCAL,
             isVerified = false
         )
-        user.accessKeys += resolveKeys(request.accessKeys)
         userRepository.save(user)
 
         val code = verificationCodeService.issue(email)
@@ -203,7 +199,6 @@ class AuthService(
 
         val googleUser = googleTokenVerifier.verify(request.idToken)
         val email = googleUser.email.trim().lowercase()
-        val keys = resolveKeys(request.accessKeys)
 
         val existing = userRepository.findByEmail(email).orElse(null)
         val user = existing ?: userRepository.save(
@@ -218,9 +213,6 @@ class AuthService(
         if (existing != null && !existing.isVerified) {
             existing.isVerified = true
         }
-        if (keys.isNotEmpty()) {
-            user.accessKeys.addAll(keys)
-        }
 
         return issueTokens(userRepository.save(user))
     }
@@ -232,15 +224,6 @@ class AuthService(
         refreshToken = refreshTokenService.issue(user.id),
         expiresIn = jwtProperties.expiration.seconds
     )
-
-    private fun resolveKeys(rawKeys: List<String>): List<AccessKey> = rawKeys.map { raw ->
-        val keyValue = raw.trim()
-        accessKeyRepository.findByKeyValue(keyValue)
-            .filter { it.isActive }
-            .orElseThrow {
-                ApiException(HttpStatus.BAD_REQUEST, "Access key '$keyValue' does not exist or is not active")
-            }
-    }.distinctBy { it.id }
 
     private fun devCode(code: String): String? =
         if (exposeVerificationCode && !mailService.enabled) code else null

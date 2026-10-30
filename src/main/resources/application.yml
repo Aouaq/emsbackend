@@ -1,10 +1,14 @@
 # =============================================================================
-# ElectricWave backend configuration
+# ElectricWave access backend - base configuration (no secrets, no defaults
+# that are unsafe outside development). Profile-specific values live in
+# application-dev.yml and application-prod.yml.
 # =============================================================================
 
 spring:
   application:
-    name: electricwave-api
+    name: electricwave-access
+  profiles:
+    default: dev
 
   # ----------------------------------------------------------------------------
   # PostgreSQL (matches compose.yaml; override via env in real deployments)
@@ -38,7 +42,7 @@ spring:
     validate-on-migrate: true
 
   # ----------------------------------------------------------------------------
-  # Redis (verification codes, caching)
+  # Redis (verification codes, refresh tokens, rate limits)
   # ----------------------------------------------------------------------------
   data:
     redis:
@@ -49,10 +53,10 @@ spring:
   # Mail (SMTP) - start-up safe: app.mail.enabled=false skips sending entirely
   # ----------------------------------------------------------------------------
   mail:
-    host: ${SMTP_HOST:localhost}
-    port: ${SMTP_PORT:587}
-    username: ${SMTP_USERNAME:}
-    password: ${SMTP_PASSWORD:}
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
@@ -75,71 +79,57 @@ server:
 # Application specific settings
 # =============================================================================
 app:
-  # JWT: HS256. The secret must be >= 32 bytes. ALWAYS override in production.
+  # JWT: HS256. The secret must be at least 32 bytes and has no default.
   jwt:
-    secret: ${JWT_SECRET:dev-only-secret-change-me-with-at-least-32-bytes!!}
-    issuer: electricwave
-    # Short-lived access token; mobile clients refresh it via /api/auth/refresh.
-    expiration: ${JWT_EXPIRATION:30m}
-    # Opaque refresh token stored (hashed) in Redis and rotated on every use.
-    refresh-expiration: ${JWT_REFRESH_EXPIRATION:30d}
+    secret: ${APP_JWT_SECRET:}
+    issuer: ${APP_JWT_ISSUER:electricwave}
+    expiration: ${APP_JWT_EXPIRATION:15m}
+    refresh-expiration: ${APP_JWT_REFRESH_EXPIRATION:30d}
 
   # Redis-backed fixed-window rate limits for public authentication endpoints.
   rate-limit:
-    enabled: ${RATE_LIMIT_ENABLED:true}
-    login-ip-per-minute: ${RATE_LIMIT_LOGIN_IP_PER_MINUTE:10}
-    login-email-per-minute: ${RATE_LIMIT_LOGIN_EMAIL_PER_MINUTE:5}
-    register-ip-per-hour: ${RATE_LIMIT_REGISTER_IP_PER_HOUR:5}
-    verify-ip-per-10-minutes: ${RATE_LIMIT_VERIFY_IP_PER_10_MINUTES:20}
-    resend-email-per-10-minutes: ${RATE_LIMIT_RESEND_EMAIL_PER_10_MINUTES:3}
-    resend-ip-per-hour: ${RATE_LIMIT_RESEND_IP_PER_HOUR:10}
-    refresh-ip-per-minute: ${RATE_LIMIT_REFRESH_IP_PER_MINUTE:30}
-    google-ip-per-10-minutes: ${RATE_LIMIT_GOOGLE_IP_PER_10_MINUTES:10}
+    enabled: ${APP_RATE_LIMIT_ENABLED:true}
+    login-ip-per-minute: ${APP_RATE_LIMIT_LOGIN_IP_PER_MINUTE:10}
+    login-email-per-minute: ${APP_RATE_LIMIT_LOGIN_EMAIL_PER_MINUTE:5}
+    register-ip-per-hour: ${APP_RATE_LIMIT_REGISTER_IP_PER_HOUR:5}
+    verify-ip-per-10-minutes: ${APP_RATE_LIMIT_VERIFY_IP_PER_10_MINUTES:20}
+    resend-email-per-10-minutes: ${APP_RATE_LIMIT_RESEND_EMAIL_PER_10_MINUTES:3}
+    resend-ip-per-hour: ${APP_RATE_LIMIT_RESEND_IP_PER_HOUR:10}
+    refresh-ip-per-minute: ${APP_RATE_LIMIT_REFRESH_IP_PER_MINUTE:30}
+    google-ip-per-10-minutes: ${APP_RATE_LIMIT_GOOGLE_IP_PER_10_MINUTES:10}
 
-  # Where the browser lands right after a successful Google login.
-  # The issued JWT is appended as a "token" query parameter.
+  # Native Google sign-in (ID token verified locally). Browser OAuth is not used.
   oauth2:
-    success-url: ${OAUTH2_SUCCESS_URL:/api/auth/oauth2/success}
     google:
-      # Google OAuth2 login is enabled only when BOTH values are non-blank.
-      client-id: ${GOOGLE_CLIENT_ID:}
-      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      client-id: ${APP_OAUTH2_GOOGLE_CLIENT_ID:}
 
   # Bootstrap admin account (created on first boot if no ADMIN exists).
   admin:
-    email: ${ADMIN_EMAIL:admin@electricwave.local}
-    password: ${ADMIN_PASSWORD:admin123}
-    full-name: ${ADMIN_NAME:System Administrator}
+    email: ${APP_ADMIN_EMAIL:}
+    password: ${APP_ADMIN_PASSWORD:}
+    full-name: ${APP_ADMIN_NAME:System Administrator}
 
   # Mail / verification
   mail:
-    enabled: ${MAIL_ENABLED:false}
-    from: ${SMTP_FROM:no-reply@electricwave.local}
+    enabled: ${APP_MAIL_ENABLED:false}
+    from: ${APP_MAIL_FROM:no-reply@electricwave.local}
 
-  # DEV ONLY: return the verification code in the register response when mail
-  # sending is disabled. Keep false in production.
+  # DEV ONLY: return the verification code in API responses when mail is off.
   auth:
-    expose-verification-code: ${AUTH_EXPOSE_CODE:true}
+    expose-verification-code: ${APP_AUTH_EXPOSE_VERIFICATION_CODE:false}
 
 # =============================================================================
 # OpenAPI / Swagger UI (ADMIN-only, see SecurityConfig)
 # =============================================================================
 springdoc:
   api-docs:
-    enabled: ${SWAGGER_ENABLED:true}
+    enabled: ${APP_OPENAPI_ENABLED:true}
     path: /v3/api-docs
   swagger-ui:
-    enabled: ${SWAGGER_ENABLED:true}
+    enabled: ${APP_OPENAPI_ENABLED:true}
     path: /swagger-ui.html
     operations-sorter: method
     tags-sorter: alpha
-
-# =============================================================================
-# Spring Boot Admin server (dev monitoring UI, secured note: permitAll in this
-# SecurityConfig; restrict before running in production)
-# =============================================================================
-spring.boot.admin:
-  context-path: /monitoring
 
 logging:
   level:

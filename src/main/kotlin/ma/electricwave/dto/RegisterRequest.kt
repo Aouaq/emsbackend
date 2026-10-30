@@ -20,11 +20,5 @@ data class RegisterRequest(
 
     @field:Size(max = 255)
     @field:Schema(description = "Optional display name", example = "Client One", nullable = true)
-    val fullName: String? = null,
-
-    @field:Schema(
-        description = "Access keys to link to the account; every key must exist and be active",
-        example = "[\"ew_metering_01\"]"
-    )
-    val accessKeys: List<String> = emptyList()
+    val fullName: String? = null
 )

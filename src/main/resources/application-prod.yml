@@ -1,0 +1,24 @@
+# =============================================================================
+# Production profile. Secrets must come from the environment; the application
+# fails fast at startup when a required secret is missing or invalid.
+# =============================================================================
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+  docker:
+    compose:
+      enabled: false
+
+app:
+  mail:
+    enabled: ${APP_MAIL_ENABLED:true}
+  auth:
+    expose-verification-code: false
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

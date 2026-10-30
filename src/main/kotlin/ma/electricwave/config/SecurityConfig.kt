@@ -1,11 +1,7 @@
 package ma.electricwave.config
 
-import ma.electricwave.security.CustomOidcUserService
-import ma.electricwave.security.CustomUserDetailsService
 import ma.electricwave.security.JwtProperties
-import ma.electricwave.security.OAuth2LoginSuccessHandler
 import org.springframework.boot.context.properties.EnableConfigurationProperties
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpStatus
@@ -19,7 +15,6 @@ import org.springframework.security.config.annotation.web.invoke
 import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter
@@ -37,8 +32,6 @@ import javax.crypto.spec.SecretKeySpec
 @EnableConfigurationProperties(JwtProperties::class, RateLimitProperties::class)
 class SecurityConfig(
     private val userDetailsService: UserDetailsService,
-    private val oidcUserService: CustomOidcUserService,
-    private val oauth2LoginSuccessHandler: OAuth2LoginSuccessHandler,
     private val jwtProperties: JwtProperties
 ) {
 
@@ -69,10 +62,7 @@ class SecurityConfig(
     }
 
     @Bean
-    fun securityFilterChain(
-        http: HttpSecurity,
-        clientRegistrationRepository: ObjectProvider<ClientRegistrationRepository>
-    ): SecurityFilterChain {
+    fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         val apiMatcher = RequestMatcher { request -> request.requestURI.startsWith("/api/") }
         val adminAreaMatcher = RequestMatcher { request ->
             val uri = request.requestURI
@@ -90,14 +80,10 @@ class SecurityConfig(
                         "/api/auth/login",
                         "/api/auth/refresh",
                         "/api/auth/logout",
-                        "/api/auth/oauth2/success",
                         "/api/auth/oauth2/google",
-                        "/oauth2/**",
-                        "/login/oauth2/**",
                         "/admin/login",
                         "/error",
-                        "/actuator/health/**",
-                        "/monitoring/**"
+                        "/actuator/health/**"
                     ).permitAll()
                     .requestMatchers("/api/admin/**").hasRole("ADMIN")
                     .requestMatchers("/admin/**").hasRole("ADMIN")
@@ -134,13 +120,6 @@ class SecurityConfig(
             .oauth2ResourceServer { resourceServer ->
                 resourceServer.jwt { jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()) }
             }
-
-        clientRegistrationRepository.getIfAvailable()?.let {
-            http.oauth2Login { login ->
-                login.successHandler(oauth2LoginSuccessHandler)
-                    .userInfoEndpoint { endpoint -> endpoint.oidcUserService(oidcUserService) }
-            }
-        }
 
         return http.build()
     }

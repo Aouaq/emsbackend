@@ -7,6 +7,6 @@ import java.time.Duration
 data class JwtProperties(
     val secret: String,
     val issuer: String = "electricwave",
-    val expiration: Duration = Duration.ofMinutes(30),
+    val expiration: Duration = Duration.ofMinutes(15),
     val refreshExpiration: Duration = Duration.ofDays(30)
 )

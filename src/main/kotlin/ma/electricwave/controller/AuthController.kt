@@ -18,11 +18,9 @@ import ma.electricwave.dto.VerifyRequest
 import ma.electricwave.dto.VerifyResponse
 import ma.electricwave.service.AuthService
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 @Tag(name = "Authentication", description = "Registration, email verification, login, token refresh and Google sign-in")
@@ -32,13 +30,12 @@ class AuthController(private val authService: AuthService) {
 
     @Operation(
         summary = "Register a client account",
-        description = "Creates an unverified CLIENT account linked to the given access keys. " +
-            "Every access key must exist and be active. A 6-digit verification code is stored in Redis " +
-            "for 10 minutes and sent by email."
+        description = "Creates an unverified CLIENT account with no linked Emoncms accounts. " +
+            "A 6-digit verification code is stored in Redis for 10 minutes and sent by email."
     )
     @ApiResponses(
         ApiResponse(responseCode = "201", description = "Account created; verification code sent"),
-        ApiResponse(responseCode = "400", description = "Validation failed or an access key is unknown/inactive"),
+        ApiResponse(responseCode = "400", description = "Validation failed"),
         ApiResponse(responseCode = "409", description = "An account with this email already exists"),
         ApiResponse(responseCode = "429", description = "Rate limit exceeded")
     )
@@ -136,7 +133,7 @@ class AuthController(private val authService: AuthService) {
     )
     @ApiResponses(
         ApiResponse(responseCode = "200", description = "Tokens issued"),
-        ApiResponse(responseCode = "400", description = "Validation failed or an access key is unknown/inactive"),
+        ApiResponse(responseCode = "400", description = "Validation failed"),
         ApiResponse(responseCode = "401", description = "Invalid Google ID token"),
         ApiResponse(responseCode = "429", description = "Rate limit exceeded"),
         ApiResponse(responseCode = "503", description = "Google sign-in is not configured")
@@ -146,17 +143,4 @@ class AuthController(private val authService: AuthService) {
         @Valid @RequestBody request: GoogleLoginRequest,
         http: HttpServletRequest
     ): TokenResponse = authService.loginWithGoogle(request, http.remoteAddr)
-
-    @Operation(
-        summary = "Google OAuth2 success callback",
-        description = "Redirect target used after a successful browser Google sign-in. The issued JWT is passed " +
-            "as the token query parameter and echoed back for client applications."
-    )
-    @ApiResponse(responseCode = "200", description = "JWT echoed for the client application")
-    @GetMapping("/oauth2/success")
-    fun oauth2Success(@RequestParam token: String): Map<String, String> = mapOf(
-        "token" to token,
-        "tokenType" to "Bearer",
-        "message" to "Google sign-in successful. Use this JWT as Bearer token."
-    )
 }

@@ -18,14 +18,12 @@ abstract class ApiTestSupport {
 
     protected fun register(
         email: String,
-        password: String = DEFAULT_PASSWORD,
-        accessKeys: List<String> = listOf("ew_metering_01")
+        password: String = DEFAULT_PASSWORD
     ): String {
-        val keysJson = accessKeys.joinToString(",") { "\"$it\"" }
         val result = mockMvc.perform(
             post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"email":"$email","password":"$password","accessKeys":[$keysJson]}""")
+                .content("""{"email":"$email","password":"$password"}""")
         ).andExpect(status().isCreated).andReturn()
         return JsonPath.read(result.response.contentAsString, "$.devVerificationCode")
     }
@@ -40,10 +38,9 @@ abstract class ApiTestSupport {
 
     protected fun registerAndVerify(
         email: String,
-        password: String = DEFAULT_PASSWORD,
-        accessKeys: List<String> = listOf("ew_metering_01")
+        password: String = DEFAULT_PASSWORD
     ) {
-        val code = register(email, password, accessKeys)
+        val code = register(email, password)
         verify(email, code)
     }
 

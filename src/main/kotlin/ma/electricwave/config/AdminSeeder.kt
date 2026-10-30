@@ -23,6 +23,10 @@ class AdminSeeder(
 
     override fun run(args: ApplicationArguments) {
         val email = adminEmail.trim().lowercase()
+        if (email.isBlank() || adminPassword.isBlank()) {
+            log.warn("Admin seeding skipped: app.admin.email and app.admin.password must both be set.")
+            return
+        }
         if (!userRepository.existsByRole(Role.ADMIN)) {
             if (userRepository.existsByEmail(email)) {
                 log.warn(
