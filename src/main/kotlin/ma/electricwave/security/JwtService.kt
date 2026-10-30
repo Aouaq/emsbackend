@@ -13,12 +13,14 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
 import org.springframework.stereotype.Component
 import java.nio.charset.StandardCharsets
 import java.time.Instant
+import java.util.UUID
 
 @Component
 class JwtService(private val jwtProperties: JwtProperties) {
 
     companion object {
         const val ROLES_CLAIM = "roles"
+        const val USER_ID_CLAIM = "uid"
     }
 
     private val jwk = OctetSequenceKey.Builder(
@@ -30,16 +32,16 @@ class JwtService(private val jwtProperties: JwtProperties) {
 
     private val encoder = NimbusJwtEncoder(jwkSource)
 
-    fun issue(user: User): String = issue(user.email, listOf(user.role.name))
-
-    fun issue(email: String, roles: List<String>): String {
+    fun issue(user: User): String {
         val now = Instant.now()
         val claims = JwtClaimsSet.builder()
             .issuer(jwtProperties.issuer)
-            .subject(email)
+            .subject(user.email)
             .issuedAt(now)
             .expiresAt(now.plus(jwtProperties.expiration))
-            .claim(ROLES_CLAIM, roles)
+            .id(UUID.randomUUID().toString())
+            .claim(ROLES_CLAIM, listOf(user.role.name))
+            .claim(USER_ID_CLAIM, user.id)
             .build()
         val parameters = JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)
         return encoder.encode(parameters).tokenValue

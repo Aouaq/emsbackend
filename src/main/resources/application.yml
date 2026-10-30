@@ -74,6 +74,18 @@ spring:
 
 server:
   port: ${SERVER_PORT:8082}
+  tomcat:
+    max-http-form-post-size: 1MB
+    max-swallow-size: 1MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
 
 # =============================================================================
 # Application specific settings
@@ -101,6 +113,19 @@ app:
     resend-ip-per-hour: ${APP_RATE_LIMIT_RESEND_IP_PER_HOUR:10}
     refresh-ip-per-minute: ${APP_RATE_LIMIT_REFRESH_IP_PER_MINUTE:30}
     google-ip-per-10-minutes: ${APP_RATE_LIMIT_GOOGLE_IP_PER_10_MINUTES:10}
+    claim-per-user-per-minute: ${APP_RATE_LIMIT_CLAIM_PER_USER_PER_MINUTE:5}
+    claim-per-ip-per-minute: ${APP_RATE_LIMIT_CLAIM_PER_IP_PER_MINUTE:20}
+    forgot-per-email-per-hour: ${APP_RATE_LIMIT_FORGOT_PER_EMAIL_PER_HOUR:3}
+    forgot-per-ip-per-hour: ${APP_RATE_LIMIT_FORGOT_PER_IP_PER_HOUR:10}
+    reset-per-ip-per-10-minutes: ${APP_RATE_LIMIT_RESET_PER_IP_PER_10_MINUTES:10}
+    gateway-per-user-per-minute: ${APP_RATE_LIMIT_GATEWAY_PER_USER_PER_MINUTE:300}
+    change-password-per-user-per-10-minutes: ${APP_RATE_LIMIT_CHANGE_PASSWORD_PER_USER_PER_10_MINUTES:5}
+
+  # Only trust X-Forwarded-For when the direct peer is one of these proxies.
+  trusted-proxies: ${APP_TRUSTED_PROXIES:}
+
+  http:
+    max-request-bytes: ${APP_HTTP_MAX_REQUEST_BYTES:1048576}
 
   # Native Google sign-in (ID token verified locally). Browser OAuth is not used.
   oauth2:

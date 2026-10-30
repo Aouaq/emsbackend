@@ -23,10 +23,12 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.security.authentication.AuthenticationManager
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
+import org.springframework.security.core.AuthenticationException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
+import java.time.Instant
 
 @Service
 class AuthService(
@@ -41,6 +43,7 @@ class AuthService(
     private val rateLimitService: RateLimitService,
     private val rateLimitProperties: RateLimitProperties,
     private val googleTokenVerifier: GoogleTokenVerifier,
+    private val auditService: AuditService,
     @Value("\${app.auth.expose-verification-code}") private val exposeVerificationCode: Boolean = false
 ) {
 
@@ -55,7 +58,7 @@ class AuthService(
 
         val email = request.email.trim().lowercase()
         if (userRepository.existsByEmail(email)) {
-            throw ApiException(HttpStatus.CONFLICT, "An account with this email already exists")
+            throw ApiException(HttpStatus.CONFLICT, "An account with this email already exists", "CONFLICT")
         }
 
         val user = User(
@@ -67,6 +70,12 @@ class AuthService(
             isVerified = false
         )
         userRepository.save(user)
+        auditService.record(
+            "REGISTER",
+            actorUserId = user.id,
+            actorEmail = email,
+            ipAddress = clientIp
+        )
 
         val code = verificationCodeService.issue(email)
         mailService.sendVerificationCode(email, code)
@@ -89,19 +98,25 @@ class AuthService(
         )
 
         val email = request.email.trim().lowercase()
-        val user = userRepository.findByEmail(email).orElseThrow {
-            ApiException(HttpStatus.NOT_FOUND, "No account found for this email")
-        }
-        if (user.isVerified) {
-            throw ApiException(HttpStatus.BAD_REQUEST, "Account is already verified")
-        }
-        if (!verificationCodeService.verify(email, request.code)) {
-            throw ApiException(HttpStatus.BAD_REQUEST, "Invalid or expired verification code")
+        val user = userRepository.findByEmail(email).orElse(null)
+        val codeValid = verificationCodeService.verify(email, request.code)
+        if (user == null || user.isVerified || !codeValid) {
+            throw ApiException(
+                HttpStatus.BAD_REQUEST,
+                "Invalid or expired verification code",
+                "INVALID_CODE"
+            )
         }
 
         user.isVerified = true
         userRepository.save(user)
         verificationCodeService.clear(email)
+        auditService.record(
+            "VERIFY_EMAIL",
+            actorUserId = user.id,
+            actorEmail = email,
+            ipAddress = clientIp
+        )
         return VerifyResponse(email = email, verified = true, message = "Email verified successfully")
     }
 
@@ -135,7 +150,7 @@ class AuthService(
         )
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun login(request: LoginRequest, clientIp: String): TokenResponse {
         val email = request.email.trim().lowercase()
         rateLimitService.check(
@@ -151,14 +166,35 @@ class AuthService(
             Duration.ofMinutes(1)
         )
 
-        authenticationManager.authenticate(UsernamePasswordAuthenticationToken(email, request.password))
+        try {
+            authenticationManager.authenticate(UsernamePasswordAuthenticationToken(email, request.password))
+        } catch (ex: AuthenticationException) {
+            auditService.record(
+                "LOGIN_FAILURE",
+                actorEmail = email,
+                ipAddress = clientIp,
+                details = mapOf("reason" to "bad_credentials")
+            )
+            throw ApiException(
+                HttpStatus.UNAUTHORIZED,
+                "Invalid email or password",
+                "INVALID_CREDENTIALS"
+            )
+        }
 
         val user = userRepository.findByEmail(email).orElseThrow {
-            ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password")
+            ApiException(HttpStatus.UNAUTHORIZED, "Invalid email or password", "INVALID_CREDENTIALS")
         }
-        if (!user.isVerified) {
-            throw ApiException(HttpStatus.FORBIDDEN, "Account not verified. Please verify your email first.")
-        }
+        assertAccountUsable(user, clientIp, auditFailures = true)
+
+        user.lastLoginAt = Instant.now()
+        userRepository.save(user)
+        auditService.record(
+            "LOGIN_SUCCESS",
+            actorUserId = user.id,
+            actorEmail = email,
+            ipAddress = clientIp
+        )
 
         return issueTokens(user)
     }
@@ -172,20 +208,51 @@ class AuthService(
             Duration.ofMinutes(1)
         )
 
-        val userId = refreshTokenService.consume(request.refreshToken)
-            ?: throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token")
-        val user = userRepository.findById(userId).orElseThrow {
-            ApiException(HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token")
-        }
-        if (!user.isVerified) {
-            throw ApiException(HttpStatus.FORBIDDEN, "Account not verified. Please verify your email first.")
-        }
+        return when (val result = refreshTokenService.consume(request.refreshToken)) {
+            is RefreshConsumeResult.Active -> {
+                val user = userRepository.findById(result.userId).orElseThrow {
+                    ApiException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Invalid or expired refresh token",
+                        "INVALID_REFRESH_TOKEN"
+                    )
+                }
+                assertAccountUsable(user, clientIp, auditFailures = false)
+                issueTokens(user, result.familyId)
+            }
 
-        return issueTokens(user)
+            is RefreshConsumeResult.Reused -> {
+                auditService.record(
+                    "REFRESH_REUSE_DETECTED",
+                    actorUserId = result.userId,
+                    ipAddress = clientIp,
+                    details = mapOf("familyId" to result.familyId)
+                )
+                throw ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Refresh token reuse detected; sessions revoked",
+                    "REFRESH_TOKEN_REUSED"
+                )
+            }
+
+            RefreshConsumeResult.Invalid -> throw ApiException(
+                HttpStatus.UNAUTHORIZED,
+                "Invalid or expired refresh token",
+                "INVALID_REFRESH_TOKEN"
+            )
+        }
     }
 
-    fun logout(request: RefreshTokenRequest) {
-        refreshTokenService.revoke(request.refreshToken)
+    fun logout(request: RefreshTokenRequest, clientIp: String) {
+        val revoked = refreshTokenService.revoke(request.refreshToken)
+        if (revoked != null) {
+            auditService.record(
+                "LOGOUT",
+                actorUserId = revoked.userId,
+                ipAddress = clientIp,
+                details = mapOf("familyId" to revoked.familyId)
+            )
+        }
     }
 
     @Transactional
@@ -210,18 +277,73 @@ class AuthService(
                 isVerified = true
             )
         )
-        if (existing != null && !existing.isVerified) {
-            existing.isVerified = true
+
+        if (user.disabledAt != null) {
+            auditService.record(
+                "LOGIN_FAILURE",
+                actorUserId = user.id,
+                actorEmail = email,
+                ipAddress = clientIp,
+                details = mapOf("reason" to "disabled")
+            )
+            throw ApiException(HttpStatus.FORBIDDEN, "Account is disabled", "ACCOUNT_DISABLED")
         }
 
-        return issueTokens(userRepository.save(user))
+        if (!user.isVerified) {
+            user.isVerified = true
+            if (user.authProvider == AuthProvider.LOCAL) {
+                user.password = null
+                user.authProvider = AuthProvider.GOOGLE
+            }
+        }
+        user.lastLoginAt = Instant.now()
+        userRepository.save(user)
+
+        auditService.record(
+            "GOOGLE_LOGIN",
+            actorUserId = user.id,
+            actorEmail = email,
+            ipAddress = clientIp
+        )
+        return issueTokens(user)
     }
 
-    private fun issueTokens(user: User): TokenResponse = TokenResponse(
+    private fun assertAccountUsable(user: User, clientIp: String, auditFailures: Boolean) {
+        if (user.disabledAt != null) {
+            if (auditFailures) {
+                auditService.record(
+                    "LOGIN_FAILURE",
+                    actorUserId = user.id,
+                    actorEmail = user.email,
+                    ipAddress = clientIp,
+                    details = mapOf("reason" to "disabled")
+                )
+            }
+            throw ApiException(HttpStatus.FORBIDDEN, "Account is disabled", "ACCOUNT_DISABLED")
+        }
+        if (!user.isVerified) {
+            if (auditFailures) {
+                auditService.record(
+                    "LOGIN_FAILURE",
+                    actorUserId = user.id,
+                    actorEmail = user.email,
+                    ipAddress = clientIp,
+                    details = mapOf("reason" to "unverified")
+                )
+            }
+            throw ApiException(
+                HttpStatus.FORBIDDEN,
+                "Account not verified. Please verify your email first.",
+                "ACCOUNT_NOT_VERIFIED"
+            )
+        }
+    }
+
+    private fun issueTokens(user: User, familyId: String? = null): TokenResponse = TokenResponse(
         token = jwtService.issue(user),
         email = user.email,
         role = user.role.name,
-        refreshToken = refreshTokenService.issue(user.id),
+        refreshToken = refreshTokenService.issue(user.id, familyId),
         expiresIn = jwtProperties.expiration.seconds
     )
 

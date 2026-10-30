@@ -16,6 +16,7 @@ import ma.electricwave.dto.ResendVerificationResponse
 import ma.electricwave.dto.TokenResponse
 import ma.electricwave.dto.VerifyRequest
 import ma.electricwave.dto.VerifyResponse
+import ma.electricwave.security.ClientIpResolver
 import ma.electricwave.service.AuthService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
@@ -26,7 +27,10 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "Authentication", description = "Registration, email verification, login, token refresh and Google sign-in")
 @RestController
 @RequestMapping("/api/auth")
-class AuthController(private val authService: AuthService) {
+class AuthController(
+    private val authService: AuthService,
+    private val clientIpResolver: ClientIpResolver
+) {
 
     @Operation(
         summary = "Register a client account",
@@ -44,7 +48,7 @@ class AuthController(private val authService: AuthService) {
         @Valid @RequestBody request: RegisterRequest,
         http: HttpServletRequest
     ): ResponseEntity<RegisterResponse> =
-        ResponseEntity.status(201).body(authService.register(request, http.remoteAddr))
+        ResponseEntity.status(201).body(authService.register(request, clientIpResolver.resolve(http)))
 
     @Operation(
         summary = "Verify the email address",
@@ -61,7 +65,7 @@ class AuthController(private val authService: AuthService) {
     fun verify(
         @Valid @RequestBody request: VerifyRequest,
         http: HttpServletRequest
-    ): VerifyResponse = authService.verify(request, http.remoteAddr)
+    ): VerifyResponse = authService.verify(request, clientIpResolver.resolve(http))
 
     @Operation(
         summary = "Resend the verification code",
@@ -77,7 +81,7 @@ class AuthController(private val authService: AuthService) {
     fun resendVerification(
         @Valid @RequestBody request: ResendVerificationRequest,
         http: HttpServletRequest
-    ): ResendVerificationResponse = authService.resendVerification(request, http.remoteAddr)
+    ): ResendVerificationResponse = authService.resendVerification(request, clientIpResolver.resolve(http))
 
     @Operation(
         summary = "Log in and issue tokens",
@@ -94,7 +98,7 @@ class AuthController(private val authService: AuthService) {
     fun login(
         @Valid @RequestBody request: LoginRequest,
         http: HttpServletRequest
-    ): TokenResponse = authService.login(request, http.remoteAddr)
+    ): TokenResponse = authService.login(request, clientIpResolver.resolve(http))
 
     @Operation(
         summary = "Rotate the refresh token",
@@ -110,7 +114,7 @@ class AuthController(private val authService: AuthService) {
     fun refresh(
         @Valid @RequestBody request: RefreshTokenRequest,
         http: HttpServletRequest
-    ): TokenResponse = authService.refresh(request, http.remoteAddr)
+    ): TokenResponse = authService.refresh(request, clientIpResolver.resolve(http))
 
     @Operation(
         summary = "Log out",
@@ -121,8 +125,11 @@ class AuthController(private val authService: AuthService) {
         ApiResponse(responseCode = "400", description = "Validation failed")
     )
     @PostMapping("/logout")
-    fun logout(@Valid @RequestBody request: RefreshTokenRequest): ResponseEntity<Void> {
-        authService.logout(request)
+    fun logout(
+        @Valid @RequestBody request: RefreshTokenRequest,
+        http: HttpServletRequest
+    ): ResponseEntity<Void> {
+        authService.logout(request, clientIpResolver.resolve(http))
         return ResponseEntity.noContent().build()
     }
 
@@ -142,5 +149,5 @@ class AuthController(private val authService: AuthService) {
     fun googleLogin(
         @Valid @RequestBody request: GoogleLoginRequest,
         http: HttpServletRequest
-    ): TokenResponse = authService.loginWithGoogle(request, http.remoteAddr)
+    ): TokenResponse = authService.loginWithGoogle(request, clientIpResolver.resolve(http))
 }

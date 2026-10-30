@@ -11,7 +11,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import kotlin.test.assertTrue
 
 @MobileApiIntegrationTest
 class GoogleNativeLoginIntegrationTest : ApiTestSupport() {
@@ -48,8 +47,19 @@ class GoogleNativeLoginIntegrationTest : ApiTestSupport() {
                 .content("""{"idToken":"valid-token"}""")
         ).andExpect(status().isOk)
 
-        val tokens = login(email)
-        assertTrue(tokens.accessToken.isNotBlank())
+        mockMvc.perform(
+            post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"email":"$email","password":"$DEFAULT_PASSWORD"}""")
+        ).andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
+
+        mockMvc.perform(
+            post("/api/auth/oauth2/google")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"idToken":"valid-token"}""")
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$.token").isNotEmpty)
     }
 
     @Test

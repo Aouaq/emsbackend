@@ -32,7 +32,8 @@ class RateLimitService(
         if (!properties.enabled) return
 
         val windowMillis = window.toMillis()
-        val bucket = System.currentTimeMillis() / windowMillis
+        val now = System.currentTimeMillis()
+        val bucket = now / windowMillis
         val key = "rl:$scope:${sha256Hex(identifier)}:$bucket"
 
         val count = redisTemplate.execute(
@@ -42,9 +43,12 @@ class RateLimitService(
         ) ?: 0L
 
         if (count > limit) {
+            val retryAfterSeconds = ((bucket + 1) * windowMillis - now) / 1000
             throw ApiException(
                 HttpStatus.TOO_MANY_REQUESTS,
-                "Too many requests. Please try again later."
+                "Too many requests. Please try again later.",
+                "RATE_LIMITED",
+                retryAfterSeconds.coerceAtLeast(1)
             )
         }
     }

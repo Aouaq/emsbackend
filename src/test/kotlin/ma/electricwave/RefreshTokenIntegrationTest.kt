@@ -39,9 +39,11 @@ class RefreshTokenIntegrationTest : ApiTestSupport() {
 
         mockMvc.perform(refreshRequest(first.refreshToken))
             .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.code").value("REFRESH_TOKEN_REUSED"))
 
-        val second = refresh(refreshed.refreshToken)
-        assertTrue(second.accessToken.isNotBlank())
+        mockMvc.perform(refreshRequest(refreshed.refreshToken))
+            .andExpect(status().isUnauthorized)
+            .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"))
     }
 
     @Test

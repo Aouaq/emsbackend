@@ -12,5 +12,12 @@ data class RateLimitProperties(
     val resendEmailPer10Minutes: Int = 3,
     val resendIpPerHour: Int = 10,
     val refreshIpPerMinute: Int = 30,
-    val googleIpPer10Minutes: Int = 10
+    val googleIpPer10Minutes: Int = 10,
+    val claimPerUserPerMinute: Int = 5,
+    val claimPerIpPerMinute: Int = 20,
+    val forgotPerEmailPerHour: Int = 3,
+    val forgotPerIpPerHour: Int = 10,
+    val resetPerIpPer10Minutes: Int = 10,
+    val gatewayPerUserPerMinute: Int = 300,
+    val changePasswordPerUserPer10Minutes: Int = 5
 )

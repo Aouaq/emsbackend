@@ -1,5 +1,7 @@
 package ma.electricwave.config
 
+import ma.electricwave.security.ApiAccessDeniedHandler
+import ma.electricwave.security.ApiAuthenticationEntryPoint
 import ma.electricwave.security.JwtProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
@@ -16,11 +18,11 @@ import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.oauth2.jwt.JwtDecoder
+import org.springframework.security.oauth2.jwt.JwtValidators
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter
 import org.springframework.security.web.SecurityFilterChain
-import org.springframework.security.web.authentication.HttpStatusEntryPoint
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint
 import org.springframework.security.web.util.matcher.RequestMatcher
 import java.nio.charset.StandardCharsets
@@ -32,7 +34,9 @@ import javax.crypto.spec.SecretKeySpec
 @EnableConfigurationProperties(JwtProperties::class, RateLimitProperties::class)
 class SecurityConfig(
     private val userDetailsService: UserDetailsService,
-    private val jwtProperties: JwtProperties
+    private val jwtProperties: JwtProperties,
+    private val apiAuthenticationEntryPoint: ApiAuthenticationEntryPoint,
+    private val apiAccessDeniedHandler: ApiAccessDeniedHandler
 ) {
 
     @Bean
@@ -48,7 +52,9 @@ class SecurityConfig(
     @Bean
     fun jwtDecoder(): JwtDecoder = NimbusJwtDecoder.withSecretKey(
         SecretKeySpec(jwtProperties.secret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256")
-    ).build()
+    ).build().apply {
+        setJwtValidator(JwtValidators.createDefaultWithIssuer(jwtProperties.issuer))
+    }
 
     @Bean
     fun jwtAuthenticationConverter(): JwtAuthenticationConverter {
@@ -99,10 +105,8 @@ class SecurityConfig(
             }
             .exceptionHandling { exceptions ->
                 exceptions
-                    .defaultAuthenticationEntryPointFor(
-                        HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
-                        apiMatcher
-                    )
+                    .defaultAuthenticationEntryPointFor(apiAuthenticationEntryPoint, apiMatcher)
+                    .defaultAccessDeniedHandlerFor(apiAccessDeniedHandler, apiMatcher)
                     .defaultAuthenticationEntryPointFor(
                         LoginUrlAuthenticationEntryPoint("/admin/login"),
                         adminAreaMatcher
