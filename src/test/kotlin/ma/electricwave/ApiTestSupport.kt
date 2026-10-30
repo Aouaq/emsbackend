@@ -2,6 +2,7 @@ package ma.electricwave
 
 import com.jayway.jsonpath.JsonPath
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -58,6 +59,23 @@ abstract class ApiTestSupport {
     }
 
     protected fun adminLogin(): TokenPair = login("admin@electricwave.local", "admin123")
+
+    protected fun createAccessKey(
+        resource: String,
+        emoncmsKey: String,
+        active: Boolean = true
+    ): Long {
+        val admin = adminLogin()
+        val result = mockMvc.perform(
+            post("/api/admin/keys")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer ${admin.accessToken}")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """{"resource":"$resource","description":"Test resource","emoncmsKey":"$emoncmsKey","isActive":$active}"""
+                )
+        ).andExpect(status().isCreated).andReturn()
+        return JsonPath.read(result.response.contentAsString, "$.id")
+    }
 
     protected data class TokenPair(val accessToken: String, val refreshToken: String)
 

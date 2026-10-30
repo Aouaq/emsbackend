@@ -4,6 +4,8 @@ import ma.electricwave.config.RateLimitProperties
 import ma.electricwave.domain.AuthProvider
 import ma.electricwave.domain.Role
 import ma.electricwave.domain.User
+import ma.electricwave.dto.ForgotPasswordRequest
+import ma.electricwave.dto.ForgotPasswordResponse
 import ma.electricwave.dto.GoogleLoginRequest
 import ma.electricwave.dto.LoginRequest
 import ma.electricwave.dto.RefreshTokenRequest
@@ -11,6 +13,7 @@ import ma.electricwave.dto.RegisterRequest
 import ma.electricwave.dto.RegisterResponse
 import ma.electricwave.dto.ResendVerificationRequest
 import ma.electricwave.dto.ResendVerificationResponse
+import ma.electricwave.dto.ResetPasswordRequest
 import ma.electricwave.dto.TokenResponse
 import ma.electricwave.dto.VerifyRequest
 import ma.electricwave.dto.VerifyResponse
@@ -147,6 +150,73 @@ class AuthService(
         return ResendVerificationResponse(
             message = "If the account exists and is not verified, a new verification code has been sent.",
             devVerificationCode = devCode
+        )
+    }
+
+    fun forgotPassword(request: ForgotPasswordRequest, clientIp: String): ForgotPasswordResponse {
+        val email = request.email.trim().lowercase()
+        rateLimitService.check(
+            "forgot:email",
+            email,
+            rateLimitProperties.forgotPerEmailPerHour,
+            Duration.ofHours(1)
+        )
+        rateLimitService.check(
+            "forgot:ip",
+            clientIp,
+            rateLimitProperties.forgotPerIpPerHour,
+            Duration.ofHours(1)
+        )
+
+        val user = userRepository.findByEmail(email).orElse(null)
+        var devCode: String? = null
+        if (user != null && user.isVerified && user.disabledAt == null) {
+            val code = verificationCodeService.issue(email, "reset")
+            mailService.sendPasswordResetCode(email, code)
+            devCode = devCode(code)
+        }
+
+        return ForgotPasswordResponse(
+            message = "If an account exists for this email, a password reset code has been sent.",
+            devResetCode = devCode
+        )
+    }
+
+    @Transactional
+    fun resetPassword(request: ResetPasswordRequest, clientIp: String) {
+        rateLimitService.check(
+            "reset:ip",
+            clientIp,
+            rateLimitProperties.resetPerIpPer10Minutes,
+            Duration.ofMinutes(10)
+        )
+
+        val email = request.email.trim().lowercase()
+        val user = userRepository.findByEmail(email).orElse(null)
+        val codeValid = verificationCodeService.verify(email, request.code, "reset")
+        if (user == null || !user.isVerified || !codeValid) {
+            throw ApiException(
+                HttpStatus.BAD_REQUEST,
+                "Invalid or expired reset code",
+                "INVALID_CODE"
+            )
+        }
+        if (user.disabledAt != null) {
+            throw ApiException(HttpStatus.FORBIDDEN, "Account is disabled", "ACCOUNT_DISABLED")
+        }
+
+        user.password = passwordEncoder.encode(request.newPassword)
+        if (user.authProvider == AuthProvider.GOOGLE) {
+            user.authProvider = AuthProvider.LOCAL
+        }
+        userRepository.save(user)
+        verificationCodeService.clear(email, "reset")
+        refreshTokenService.revokeAllForUser(user.id)
+        auditService.record(
+            "PASSWORD_RESET",
+            actorUserId = user.id,
+            actorEmail = user.email,
+            ipAddress = clientIp
         )
     }
 

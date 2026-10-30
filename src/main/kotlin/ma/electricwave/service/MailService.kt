@@ -19,26 +19,50 @@ class MailService(
         get() = mailEnabled
 
     fun sendVerificationCode(to: String, code: String) {
-        if (!mailEnabled) {
-            log.warn("Mail is disabled (app.mail.enabled=false). Verification code for {} not sent by email.", to)
-            return
-        }
-        val message = SimpleMailMessage().apply {
-            setFrom(from)
-            setTo(to)
-            subject = "Your ElectricWave verification code"
-            text = """
+        send(
+            to,
+            "Your ElectricWave verification code",
+            """
                 Welcome to ElectricWave!
 
                 Your verification code is: $code
 
                 This code expires in 10 minutes. If you did not request it, you can ignore this email.
-            """.trimIndent()
+            """.trimIndent(),
+            "verification"
+        )
+    }
+
+    fun sendPasswordResetCode(to: String, code: String) {
+        send(
+            to,
+            "Your ElectricWave password reset code",
+            """
+                A password reset was requested for your ElectricWave account.
+
+                Your reset code is: $code
+
+                This code expires in 10 minutes. If you did not request it, you can ignore this email.
+            """.trimIndent(),
+            "password reset"
+        )
+    }
+
+    private fun send(to: String, subject: String, text: String, kind: String) {
+        if (!mailEnabled) {
+            log.warn("Mail is disabled (app.mail.enabled=false). {} code for {} not sent by email.", kind, to)
+            return
+        }
+        val message = SimpleMailMessage().apply {
+            setFrom(from)
+            setTo(to)
+            this.subject = subject
+            this.text = text
         }
         try {
             mailSender.send(message)
         } catch (ex: Exception) {
-            log.error("Failed to send verification email to {}", to, ex)
+            log.error("Failed to send {} email to {}", kind, to, ex)
         }
     }
 }

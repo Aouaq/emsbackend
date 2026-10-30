@@ -87,6 +87,8 @@ class SecurityConfig(
                         "/api/auth/refresh",
                         "/api/auth/logout",
                         "/api/auth/oauth2/google",
+                        "/api/auth/password/forgot",
+                        "/api/auth/password/reset",
                         "/admin/login",
                         "/error",
                         "/actuator/health/**"

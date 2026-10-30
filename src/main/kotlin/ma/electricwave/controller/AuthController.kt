@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
+import ma.electricwave.dto.ForgotPasswordRequest
+import ma.electricwave.dto.ForgotPasswordResponse
 import ma.electricwave.dto.GoogleLoginRequest
 import ma.electricwave.dto.LoginRequest
 import ma.electricwave.dto.RefreshTokenRequest
@@ -13,6 +15,7 @@ import ma.electricwave.dto.RegisterRequest
 import ma.electricwave.dto.RegisterResponse
 import ma.electricwave.dto.ResendVerificationRequest
 import ma.electricwave.dto.ResendVerificationResponse
+import ma.electricwave.dto.ResetPasswordRequest
 import ma.electricwave.dto.TokenResponse
 import ma.electricwave.dto.VerifyRequest
 import ma.electricwave.dto.VerifyResponse
@@ -130,6 +133,44 @@ class AuthController(
         http: HttpServletRequest
     ): ResponseEntity<Void> {
         authService.logout(request, clientIpResolver.resolve(http))
+        return ResponseEntity.noContent().build()
+    }
+
+    @Operation(
+        summary = "Request a password reset code",
+        description = "Sends a 6-digit reset code when the account exists, is verified and is active. " +
+            "The response is intentionally neutral to avoid account enumeration."
+    )
+    @ApiResponses(
+        ApiResponse(responseCode = "202", description = "Request accepted"),
+        ApiResponse(responseCode = "400", description = "Validation failed"),
+        ApiResponse(responseCode = "429", description = "Rate limit exceeded")
+    )
+    @PostMapping("/password/forgot")
+    fun forgotPassword(
+        @Valid @RequestBody request: ForgotPasswordRequest,
+        http: HttpServletRequest
+    ): ResponseEntity<ForgotPasswordResponse> =
+        ResponseEntity.status(202)
+            .body(authService.forgotPassword(request, clientIpResolver.resolve(http)))
+
+    @Operation(
+        summary = "Reset a forgotten password",
+        description = "Verifies the emailed reset code, replaces the password, revokes every refresh token " +
+            "for the account and records a PASSWORD_RESET audit event."
+    )
+    @ApiResponses(
+        ApiResponse(responseCode = "204", description = "Password reset"),
+        ApiResponse(responseCode = "400", description = "Invalid or expired reset code"),
+        ApiResponse(responseCode = "403", description = "Account is disabled"),
+        ApiResponse(responseCode = "429", description = "Rate limit exceeded")
+    )
+    @PostMapping("/password/reset")
+    fun resetPassword(
+        @Valid @RequestBody request: ResetPasswordRequest,
+        http: HttpServletRequest
+    ): ResponseEntity<Void> {
+        authService.resetPassword(request, clientIpResolver.resolve(http))
         return ResponseEntity.noContent().build()
     }
 

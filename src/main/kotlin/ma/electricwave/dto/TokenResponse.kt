@@ -14,6 +14,6 @@ data class TokenResponse(
     val role: String,
     @field:Schema(description = "Opaque refresh token; rotate it via /api/auth/refresh")
     val refreshToken: String,
-    @field:Schema(description = "Access token lifetime in seconds", example = "1800")
+    @field:Schema(description = "Access token lifetime in seconds", example = "900")
     val expiresIn: Long
 )
