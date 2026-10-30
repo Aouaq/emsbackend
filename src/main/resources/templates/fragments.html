@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:fragment="head(title)">
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title th:text="${title} + ' · ElectricWave Admin'">ElectricWave Admin</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; background: #f4f6f8; color: #1a2733; }
+        nav { background: #0b2239; color: #fff; padding: 0.75rem 1.5rem; display: flex; align-items: center; gap: 1.5rem; }
+        nav .brand { font-weight: 700; font-size: 1.05rem; margin-right: 1rem; }
+        nav a { color: #cfe0ef; text-decoration: none; font-size: 0.95rem; }
+        nav a:hover { color: #fff; }
+        nav form { margin-left: auto; }
+        main { max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; }
+        h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+        .card { background: #fff; border: 1px solid #dde4ea; border-radius: 8px; padding: 1.5rem; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+        th, td { text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid #e6ebf0; vertical-align: top; }
+        th { background: #f0f3f6; font-weight: 600; }
+        .badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+        .ok { background: #dcf5e3; color: #116632; }
+        .off { background: #fbe3e4; color: #9b1c20; }
+        .btn { display: inline-block; background: #0b5cad; color: #fff; border: none; border-radius: 6px; padding: 0.55rem 1.1rem; font-size: 0.95rem; cursor: pointer; text-decoration: none; }
+        .btn:hover { background: #084a8e; }
+        .alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+        .alert-ok { background: #dcf5e3; color: #116632; border: 1px solid #9adfb0; }
+        .alert-err { background: #fbe3e4; color: #9b1c20; border: 1px solid #f1b3b6; }
+        .field { margin-bottom: 1rem; }
+        .field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
+        .field input[type=text], .field input[type=password], .field input[type=email], .field textarea { width: 100%; padding: 0.5rem 0.65rem; border: 1px solid #c9d3db; border-radius: 6px; font-size: 0.95rem; }
+        .field .error { color: #9b1c20; font-size: 0.8rem; margin-top: 0.25rem; }
+        .checkbox { display: flex; align-items: center; gap: 0.5rem; }
+        .muted { color: #64778a; font-size: 0.85rem; }
+        .actions { margin-top: 1.25rem; display: flex; gap: 0.75rem; }
+    </style>
+</head>
+<body>
+<nav th:fragment="nav(active)">
+    <span class="brand">ElectricWave Admin</span>
+    <a th:href="@{/admin/dashboard}" th:classappend="${active == 'dashboard'} ? 'active'" href="#">Dashboard</a>
+    <a th:href="@{/admin/keys/new}" th:classappend="${active == 'new-key'} ? 'active'" href="#">Add Key</a>
+    <a th:href="@{/admin/clients}" th:classappend="${active == 'clients'} ? 'active'" href="#">Clients</a>
+    <a th:href="@{/swagger-ui.html}" target="_blank" rel="noopener" href="#">API Docs</a>
+    <form th:action="@{/admin/logout}" method="post">
+        <button type="submit" class="btn" style="background:#27476b; padding:0.35rem 0.9rem;">Log out</button>
+    </form>
+</nav>
+</body>
+</html>

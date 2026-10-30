@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Dashboard')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav('dashboard')}"></nav>
+<main>
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <h1>Access Keys Dashboard</h1>
+        <a th:href="@{/admin/keys/new}" class="btn">+ Add Access Key</a>
+    </div>
+
+    <div class="alert alert-ok" th:if="${message}" th:text="${message}"></div>
+    <div class="alert alert-err" th:if="${errorMessage}" th:text="${errorMessage}"></div>
+
+    <p class="muted">
+        <span th:text="${totalKeys}">0</span> total keys ·
+        <span th:text="${activeKeys}">0</span> active
+    </p>
+
+    <div class="card">
+        <table>
+            <thead>
+            <tr>
+                <th>Key</th>
+                <th>Resource</th>
+                <th>Status</th>
+                <th>Linked Clients</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="key : ${keys}">
+                <td><code th:text="${key.keyValue}"></code><br/><span class="muted" th:text="${key.description}"></span></td>
+                <td th:text="${key.resource}"></td>
+                <td>
+                    <span class="badge ok" th:if="${key.isActive}">ACTIVE</span>
+                    <span class="badge off" th:unless="${key.isActive}">INACTIVE</span>
+                </td>
+                <td>
+                    <span th:if="${key.linkedClients.isEmpty()}" class="muted">None</span>
+                    <code th:each="client : ${key.linkedClients}"
+                          th:text="${client} + '\n'"
+                          style="display:block; font-size:0.8rem;">client@example.com</code>
+                </td>
+                <td class="muted" th:text="${key.createdAt}"></td>
+                <td>
+                    <form th:action="@{/admin/keys/{id}/delete(id=${key.id})}" method="post"
+                          onsubmit="return confirm('Delete this access key? Linked clients will lose access immediately.');">
+                        <button type="submit" class="btn"
+                                style="background:#9b1c20; padding:0.3rem 0.7rem; font-size:0.8rem;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            <tr th:if="${keys.isEmpty()}">
+                <td colspan="6" class="muted" style="text-align:center;">No access keys yet. Create the first one.</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>

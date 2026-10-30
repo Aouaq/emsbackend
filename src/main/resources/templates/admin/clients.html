@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Client Users')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav('clients')}"></nav>
+<main>
+    <h1>Client Users</h1>
+    <div class="card">
+        <table>
+            <thead>
+            <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Provider</th>
+                <th>Status</th>
+                <th>Linked Keys</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="client : ${clients}">
+                <td th:text="${client.email}"></td>
+                <td th:text="${client.fullName ?: '—'}"></td>
+                <td th:text="${client.provider}"></td>
+                <td>
+                    <span class="badge ok" th:if="${client.verified}">VERIFIED</span>
+                    <span class="badge off" th:unless="${client.verified}">UNVERIFIED</span>
+                </td>
+                <td>
+                    <span th:if="${client.accessKeys.isEmpty()}" class="muted">None</span>
+                    <code th:each="key : ${client.accessKeys}"
+                          th:text="${key} + '\n'"
+                          style="display:block; font-size:0.8rem;">ew_...</code>
+                </td>
+            </tr>
+            <tr th:if="${clients.isEmpty()}">
+                <td colspan="5" class="muted" style="text-align:center;">No client users registered yet.</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Add Access Key')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav('new-key')}"></nav>
+<main>
+    <h1>Add Access Key</h1>
+    <div class="card" style="max-width: 560px;">
+        <div class="alert alert-err" th:if="${errorMessage}" th:text="${errorMessage}"></div>
+        <form th:action="@{/admin/keys}" th:object="${request}" method="post">
+            <div class="field">
+                <label for="keyValue">Key value <span class="muted">(optional — auto-generated when empty)</span></label>
+                <input type="text" id="keyValue" th:field="*{keyValue}" placeholder="ew_billing_02"/>
+                <div class="error" th:if="${#fields.hasErrors('keyValue')}" th:errors="*{keyValue}"></div>
+            </div>
+            <div class="field">
+                <label for="resource">Resource</label>
+                <input type="text" id="resource" th:field="*{resource}" placeholder="billing"/>
+                <div class="error" th:if="${#fields.hasErrors('resource')}" th:errors="*{resource}"></div>
+            </div>
+            <div class="field">
+                <label for="description">Description <span class="muted">(optional)</span></label>
+                <textarea id="description" th:field="*{description}" rows="3" placeholder="What these keys grant access to"></textarea>
+            </div>
+            <div class="field">
+                <label class="checkbox">
+                    <input type="checkbox" th:field="*{isActive}"/>
+                    Key is active
+                </label>
+            </div>
+            <div class="actions">
+                <button type="submit" class="btn">Save Key</button>
+                <a th:href="@{/admin/dashboard}" class="muted">Cancel</a>
+            </div>
+        </form>
+    </div>
+</main>
+</body>
+</html>
