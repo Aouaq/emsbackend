@@ -62,3 +62,61 @@ This file records every assumption or deviation from the v1 specification.
 - Registration returns `409 CONFLICT` when the email already exists. This is a
   deliberate trade-off that avoids silently creating a second account; the
   specification asks for this behaviour to be recorded here.
+
+## Authentication and account lifecycle
+
+- A disabled account is checked after credential verification and returns
+  `403 ACCOUNT_DISABLED`; an unverified account returns `403 ACCOUNT_NOT_VERIFIED`.
+  Refresh and authenticated calls use the same check.
+- The first password login for a Google-created account upgrades an unverified
+  local account by clearing the password and setting `authProvider=GOOGLE`. A
+  later password reset converts the account back to `LOCAL` and revokes sessions.
+- Refresh-token reuse revokes the whole token family, including the token that
+  was rotated in immediately before the reuse. This is intentionally strict.
+- Five failed verification or reset attempts delete the stored code, forcing a
+  new code request. Password-reset requests are neutral for unknown, unverified
+  and disabled accounts to avoid account enumeration.
+
+## Admin API
+
+- `GET /api/admin/users` now returns `PageResponse<AdminUserResponse>` instead of
+  a bare list. This is a breaking shape change from the pre-v1 admin page; page
+  size is capped at 100 and the response contains `content`, `page`, `size`,
+  `totalElements` and `totalPages`.
+- Admins cannot disable their own account (409), in addition to the specified
+  no-self-role-change and last-admin guards.
+- Admin actions are audited with the authenticated admin email in `actorEmail`
+  because the security principal carries no user id. `actorUserId` remains null
+  for these events.
+- Promotion to `ADMIN` removes the user's Emoncms links. Disabling a user and
+  changing a role revoke refresh sessions; enabling a user does not restore old
+  sessions.
+- Key replacement keeps existing client links but invalidates the old claim key.
+  Admin key updates, replacement and deletion evict both the account-access
+  cache and the gateway response cache for the affected resource.
+
+## Gateway
+
+- The gateway exposes only three fixed Emoncms paths and forwards only the
+  documented parameters for each path. Any unknown parameter, including a
+  client-supplied `apikey`, is rejected with `400 VALIDATION_FAILED`.
+- Access is checked before the 750 ms response cache is consulted. The cache is
+  shared by resource/path/query, not by user, because every caller has already
+  been authorized for the resource.
+- Admins do not bypass the link requirement on the gateway; admin access is
+  limited to account management. This keeps the data path least-privilege.
+- `app.emoncms.validate-on-save=true` validates the key against
+  `feed/list.json`. Any upstream/configuration failure during that validation is
+  mapped to `400 INVALID_KEY` for the admin save operation.
+- Caffeine `invalidateIf` is not available in the selected version, so cache
+  eviction uses `cache.asMap().keys.removeIf { ... }`.
+
+## Testing and delivery
+
+- Testcontainers currently uses `postgres:latest` and `redis:latest`, while
+  `compose.yaml` pins PostgreSQL 16 and Redis 7. Pinning the test images is a
+  follow-up cleanup; no production data exists in tests.
+- The OpenAPI export test writes `build/openapi.json` and verifies every v1
+  route plus the `ProblemDetail` schema. The schema is added by a customizer
+  because Spring's `ProblemDetail` model does not expose the custom `code` and
+  `traceId` properties.

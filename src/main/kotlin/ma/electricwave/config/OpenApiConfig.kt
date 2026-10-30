@@ -3,8 +3,11 @@ package ma.electricwave.config
 import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
+import io.swagger.v3.oas.models.media.ObjectSchema
+import io.swagger.v3.oas.models.media.StringSchema
 import io.swagger.v3.oas.models.security.SecurityScheme
 import io.swagger.v3.oas.models.servers.Server
+import org.springdoc.core.customizers.OpenApiCustomizer
 import org.springdoc.core.models.GroupedOpenApi
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -19,24 +22,25 @@ class OpenApiConfig {
                 .title("ElectricWave API")
                 .description(
                     """
-                    REST API for the ElectricWave platform.
+                    REST API for the ElectricWave Flutter application.
 
-                    Authentication flow:
-                    1. Register with one or more access keys (POST /api/auth/register).
-                    2. Verify the 6-digit code sent by email (POST /api/auth/verify); use
-                       POST /api/auth/verify/resend to request a new code.
-                    3. Log in (POST /api/auth/login), use native Google sign-in
-                       (POST /api/auth/oauth2/google) or complete the browser Google flow to obtain
-                       a JWT plus a refresh token.
-                    4. Rotate tokens with POST /api/auth/refresh and revoke the refresh token with
-                       POST /api/auth/logout.
-                    5. Send the JWT as `Authorization: Bearer <token>` on protected calls.
+                    Authentication:
+                    1. Register a client account with POST /api/auth/register (no Emoncms key).
+                    2. Verify the emailed 6-digit code with POST /api/auth/verify.
+                    3. Log in with POST /api/auth/login, refresh with POST /api/auth/refresh, or use
+                       native Google sign-in with POST /api/auth/oauth2/google.
+                    4. Send the JWT as `Authorization: Bearer <token>` on protected calls.
 
-                    Access to /api/resources/{resource} is granted only when the caller is an
-                    ADMIN or owns an active access key whose `resource` matches the path segment.
+                    Emoncms accounts are claimed from the read key embedded in the QR code or deep
+                    link via POST /api/me/keys. The backend stores only a hash and an encrypted copy
+                    of the key and never returns the plaintext.
+
+                    Feed access is limited to GET /api/gateway/{resource}/feed/list.json,
+                    /feed/data.json and /feed/timevalue.json. Only the documented query parameters
+                    are forwarded; client-supplied apikey parameters are rejected.
                     """.trimIndent()
                 )
-                .version("0.0.1")
+                .version("1.0.0")
         )
         .servers(listOf(Server().url("/").description("Current server")))
         .components(
@@ -46,9 +50,25 @@ class OpenApiConfig {
                     .type(SecurityScheme.Type.HTTP)
                     .scheme("bearer")
                     .bearerFormat("JWT")
-                    .description("Access JWT issued by /api/auth/login, /api/auth/refresh or the Google sign-in flows")
+                    .description("Access JWT issued by /api/auth/login, /api/auth/refresh or Google sign-in")
             )
         )
+
+    @Bean
+    fun problemDetailSchemaCustomizer(): OpenApiCustomizer = OpenApiCustomizer { openApi ->
+        val components = openApi.components ?: Components().also { openApi.components = it }
+        val schemas = components.schemas ?: mutableMapOf()
+        components.schemas = schemas
+        schemas["ProblemDetail"] = ObjectSchema()
+            .description("RFC 7807 problem details returned for API errors")
+            .addProperty("type", StringSchema().example("about:blank"))
+            .addProperty("title", StringSchema().example("Bad Request"))
+            .addProperty("status", io.swagger.v3.oas.models.media.IntegerSchema().example(400))
+            .addProperty("detail", StringSchema().example("Request validation failed"))
+            .addProperty("instance", StringSchema().example("/api/auth/login"))
+            .addProperty("code", StringSchema().example("VALIDATION_FAILED"))
+            .addProperty("traceId", StringSchema().example("6f1a0c5e2b7d4a91"))
+    }
 
     @Bean
     fun electricWaveApiGroup(): GroupedOpenApi = GroupedOpenApi.builder()

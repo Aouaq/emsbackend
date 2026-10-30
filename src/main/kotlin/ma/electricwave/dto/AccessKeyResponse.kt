@@ -13,7 +13,7 @@ data class AccessKeyResponse(
     val description: String?,
     @field:Schema(description = "Whether the account can be claimed", example = "true")
     val isActive: Boolean,
-    @field:Schema(description = "First characters of the Emoncms key", example = "3ddd…")
+    @field:Schema(description = "First characters of the Emoncms key", example = "3ddd")
     val keyHint: String,
     @field:Schema(description = "Whether an encrypted Emoncms key is stored", example = "true")
     val emoncmsKeyConfigured: Boolean,
