@@ -1,0 +1,50 @@
+# Local overrides. Copy to config/application.yml and fill in; that copy is gitignored.
+#
+# Spring Boot reads ./config/application.yml automatically, at higher precedence than the
+# packaged application.yml, so nothing else needs changing - no profile to activate, no
+# run-configuration environment variables. It works the same from IntelliJ and from
+# `./gradlew bootRun`, as long as the working directory is the project root.
+#
+# Never put real values in this .example file: it is committed.
+
+spring:
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: you@gmail.com
+    # The 16-character Google app password with the spaces removed. Google displays it in
+    # four groups of four purely for readability; they are not part of the password.
+    password: xxxxxxxxxxxxxxxx
+
+app:
+  mail:
+    enabled: true
+    # Gmail refuses to send as an address the authenticated account does not own, so this
+    # must match spring.mail.username (or a verified alias on it).
+    from: you@gmail.com
+
+  # Comma-separated list of the Google OAuth client IDs whose tokens are accepted.
+  # The ID token carries the client it was issued for as its audience, and that is what
+  # the backend checks, so every platform's client has to be listed:
+  #   - the Web client for Android (NOT the Android client) and for web;
+  #   - a macOS/iOS client for those builds;
+  #   - an installed-app ("Desktop app") client for a loopback desktop flow.
+  # Client IDs only. A client secret is never needed to verify an ID token, so none
+  # belongs in this file.
+  oauth2:
+    google:
+      client-id: 1042766116242-25e072rp38rq6flpfmp50igdhq342b8g.apps.googleusercontent.com,1042766116242-eknrrgeiej6o4fl7jv9ut35rj7htivb2.apps.googleusercontent.com
+
+  # Emoncms accounts to register on first boot, so a fresh database is usable without
+  # adding each one by hand through the admin API. AccessKeySeeder skips any resource
+  # that already exists, so leaving this in place is safe on every restart.
+  #
+  # These are secrets - an Emoncms read key is enough to pull an installation's data -
+  # which is why they live here and not in a committed profile or a Flyway migration.
+  # A migration could not carry them anyway: the stored key is AES-GCM ciphertext under
+  # app.crypto.master-key, so it would only decrypt under the one key that produced it.
+  seed:
+    access-keys:
+      - resource: ctm01
+        key: replace-with-the-emoncms-read-key
+        description: Optional, defaults to the resource name
