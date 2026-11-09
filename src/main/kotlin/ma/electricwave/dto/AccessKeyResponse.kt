@@ -17,6 +17,12 @@ data class AccessKeyResponse(
     val keyHint: String,
     @field:Schema(description = "Whether an encrypted Emoncms key is stored", example = "true")
     val emoncmsKeyConfigured: Boolean,
+    @field:Schema(
+        description = "The Emoncms read key. Admin-only, and returned because the client " +
+            "reads Emoncms directly rather than through this service.",
+        nullable = true
+    )
+    val emoncmsKey: String? = null,
     @field:Schema(description = "Number of clients linked to this account", example = "1")
     val linkedClients: Int,
     @field:Schema(description = "Creation timestamp (UTC)")

@@ -1,3 +1,12 @@
+volumes:
+  # Named, not anonymous. The postgres image declares a VOLUME, so without this entry
+  # Docker creates a fresh anonymous volume every time the container is *recreated* -
+  # not merely restarted - and the previous one is orphaned with the data still in it.
+  # That is how the seeded access keys were lost once: a compose change recreated the
+  # container and the new one came up against an empty database. A named volume is
+  # reattached on recreate, so the data survives everything short of `down -v`.
+  postgres-data:
+
 services:
   postgres:
     image: 'postgres:16'
@@ -5,6 +14,8 @@ services:
       - 'POSTGRES_DB=mydatabase'
       - 'POSTGRES_PASSWORD=secret'
       - 'POSTGRES_USER=myuser'
+    volumes:
+      - 'postgres-data:/var/lib/postgresql/data'
     ports:
       - '5432'
     healthcheck:
@@ -22,3 +33,85 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # The backend itself, so the whole stack can be brought up with Docker alone:
+  #
+  #   docker compose --profile full up -d --build
+  #
+  # The profile is load-bearing, not decoration. `spring-boot-docker-compose` is a
+  # developmentOnly dependency, so `./gradlew bootRun` runs `docker compose up` on this
+  # file to bring up its own dependencies. A service in the default profile would
+  # therefore be started by the very app it contains - two instances racing for port
+  # 8082. Profiled services are skipped unless asked for, so local development is
+  # untouched and both modes share one Postgres and one Redis, hence one dataset.
+  app:
+    profiles: ['full']
+    build:
+      context: .
+    image: 'electricwave-backend:local'
+    ports:
+      - '8082:8082'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Everything else the app may need - SMTP credentials, the Google client ID,
+    # production secrets - comes from a local .env, which is gitignored and whose every
+    # variable is listed in .env.example. Optional, so the stack still starts without
+    # one; nothing secret has to be written into this committed file.
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Spring Boot reads ./config/application.yml relative to the working directory,
+      # which is /app in this image, so mounting the host's gitignored config there
+      # gives the container the same SMTP credentials, Google client IDs and seeded
+      # Emoncms accounts a local run gets - without any of it entering the image.
+      # Read-only: the container has no reason to write to it, and the Dockerfile's
+      # COPY lines deliberately leave config/ out so the image stays shareable.
+      - './config:/app/config:ro'
+    healthcheck:
+      # Readiness, deliberately not the aggregate /actuator/health. That one folds in
+      # Spring's SMTP probe, which reports DOWN whenever no mail credentials are set -
+      # so with no .env the endpoint returns 503 while the app serves requests normally.
+      # A healthcheck pointed there would restart-loop a working application. Whether
+      # mail is reachable is reported per request instead, by `verificationCodeSent` on
+      # the registration response.
+      test:
+        [
+          'CMD-SHELL',
+          'curl -fsS http://localhost:8082/actuator/health/readiness || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # Cold start measured at roughly 35s: Flyway, Hibernate and the security wiring.
+      start_period: 90s
+    environment:
+      # The image pins SPRING_PROFILES_ACTIVE=prod so an image started with no
+      # configuration cannot boot on the published development secrets. This stack
+      # overrides that back to dev *deliberately*, because it is a local stack sharing
+      # the Postgres volume beside it: the Emoncms access keys in that database are
+      # encrypted with the dev crypto master key, and a prod run with a fresh key would
+      # start fine and then silently fail to decrypt every one of them.
+      #
+      # For a real deployment do not reuse this block. Drop this line so the image's
+      # prod default applies, and supply APP_JWT_SECRET, APP_CRYPTO_MASTER_KEY and
+      # APP_ADMIN_PASSWORD - SecurityStartupValidator refuses to start if any is still
+      # the published value - plus APP_TRUSTED_PROXIES when behind a reverse proxy.
+      - 'SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}'
+
+      # Pinned, and deliberately not taken from .env. Inside the compose network these
+      # are always the sibling services on their container ports, whatever random host
+      # port the entries above publish. .env.example sets DB_HOST=localhost because it
+      # describes running the app on the host - letting that reach the container would
+      # point it at itself and fail with a connection refused that looks like a
+      # database outage.
+      - 'DB_HOST=postgres'
+      - 'DB_PORT=5432'
+      - 'DB_NAME=mydatabase'
+      - 'DB_USER=myuser'
+      - 'DB_PASSWORD=secret'
+      - 'REDIS_HOST=redis'
+      - 'REDIS_PORT=6379'

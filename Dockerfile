@@ -20,4 +20,12 @@ COPY --from=build /workspace/app.jar /app/app.jar
 
 USER electricwave
 EXPOSE 8082
+
+# The base configuration sets spring.profiles.default=dev, whose profile ships
+# working development secrets (JWT signing key, crypto master key, bootstrap
+# admin password). Pin the profile here so an image started without an explicit
+# SPRING_PROFILES_ACTIVE cannot silently boot with them; SecurityStartupValidator
+# rejects those values outside the dev profile as a second line of defence.
+ENV SPRING_PROFILES_ACTIVE=prod
+
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

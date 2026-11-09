@@ -1,5 +1,9 @@
 .git
 .gitignore
+# Local overrides holding real SMTP credentials. The Dockerfile copies only gradle,
+# the build scripts and src/, so this never reaches the image anyway - excluded here
+# as well so that stays true if those COPY lines are ever widened.
+config
 .gradle
 .idea
 .kotlin

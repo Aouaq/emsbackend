@@ -44,7 +44,7 @@ All configuration is environment-driven. Do not deploy the development defaults.
 
 | Variable | Purpose |
 | --- | --- |
-| `SPRING_PROFILES_ACTIVE` | `dev` (default) or `prod` |
+| `SPRING_PROFILES_ACTIVE` | `dev` (default) or `prod`. The Docker image pins `prod`; startup aborts outside `dev` if any development secret is still set |
 | `APP_JWT_SECRET` | HS256 secret, at least 32 bytes |
 | `APP_CRYPTO_MASTER_KEY` | Base64 32-byte AES-256-GCM key |
 | `APP_ADMIN_EMAIL`, `APP_ADMIN_PASSWORD` | Bootstrap admin |
@@ -53,10 +53,11 @@ All configuration is environment-driven. Do not deploy the development defaults.
 | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` | SMTP server |
 | `APP_EMONCMS_BASE_URL` | Upstream Emoncms URL |
 | `APP_EMONCMS_VALIDATE_ON_SAVE` | Validate keys with `feed/list.json` when an admin saves |
-| `APP_TRUSTED_PROXIES` | Comma-separated proxy addresses trusted for `X-Forwarded-For` |
+| `APP_TRUSTED_PROXIES` | Comma-separated proxy addresses trusted for `X-Forwarded-For`. **Required behind a reverse proxy**, or every per-IP rate limit collapses into one bucket shared by all clients |
 | `APP_AUTH_EXPOSE_VERIFICATION_CODE` | Dev only; return codes when mail is off |
 | `APP_OPENAPI_ENABLED` | Enable `/v3/api-docs` and Swagger UI |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | PostgreSQL. Required outside the `dev` profile; there is no fallback |
+| `DB_POOL_MAX_SIZE` | Connection pool ceiling (default 20). Audited requests hold two connections at once |
 | `REDIS_HOST`, `REDIS_PORT` | Redis |
 | `SERVER_PORT` | HTTP port (default `8082`) |
 | `APP_RATE_LIMIT_*` | Per-endpoint fixed-window limits |

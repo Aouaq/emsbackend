@@ -13,12 +13,18 @@ spring:
   # ----------------------------------------------------------------------------
   # PostgreSQL (matches compose.yaml; override via env in real deployments)
   # ----------------------------------------------------------------------------
+  # No defaults here on purpose: a deployment missing DB_* must fail to start rather
+  # than quietly try the compose.yaml development credentials against localhost. The
+  # development values live in application-dev.yml.
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mydatabase}
-    username: ${DB_USER:myuser}
-    password: ${DB_PASSWORD:secret}
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: 10
+      # Audited operations hold two connections at once: the business transaction plus
+      # the REQUIRES_NEW audit write nested inside it (see AuditService). Sizing this at
+      # the number of concurrent requests would therefore deadlock at half that load.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
       connection-timeout: 5000
 
   # ----------------------------------------------------------------------------
@@ -59,13 +65,30 @@ spring:
     password: ${SPRING_MAIL_PASSWORD:}
     properties:
       mail:
+        # Set so JavaMail never resolves this host's own name. It otherwise does so twice
+        # per send, and each reverse lookup took ~17s on a developer machine with no PTR
+        # record, making a single send 37s. Measured per phase: 37.0s -> 3.5s.
+        #   mail.smtp.localhost - the name sent in EHLO.
+        #   mail.from           - without it, InternetAddress.getLocalAddress() falls back
+        #                         to InetAddress.getLocalHost().getHostName() to build the
+        #                         Message-ID header. The From header is set explicitly by
+        #                         MailService, so this only supplies that domain part.
+        #                         It tracks app.mail.from (the Spring property, so a
+        #                         config file counts, not only APP_MAIL_FROM) to keep the
+        #                         Message-ID domain the same as the real sender's.
+        # Neither value is validated by the relay; what matters is that both are fixed.
+        from: ${app.mail.from}
         smtp:
+          localhost: ${SPRING_MAIL_LOCALHOST:electricwave.local}
           auth: true
           starttls:
             enable: true
-          connectiontimeout: 5000
-          timeout: 5000
-          writetimeout: 5000
+          # A ceiling, not a delay: a healthy relay is unaffected by a generous value.
+          # Raised from 5s because that is tight for a transactional send over a slow or
+          # congested link, where a timeout turns a slow email into a lost one.
+          connectiontimeout: ${SPRING_MAIL_CONNECT_TIMEOUT:20000}
+          timeout: ${SPRING_MAIL_READ_TIMEOUT:20000}
+          writetimeout: ${SPRING_MAIL_WRITE_TIMEOUT:20000}
 
   # Auto-starts the containers in compose.yaml during development
   docker:
@@ -121,6 +144,12 @@ app:
     gateway-per-user-per-minute: ${APP_RATE_LIMIT_GATEWAY_PER_USER_PER_MINUTE:300}
     change-password-per-user-per-10-minutes: ${APP_RATE_LIMIT_CHANGE_PASSWORD_PER_USER_PER_10_MINUTES:5}
 
+  # Origins allowed to call /api/** from a browser (the Flutter web build). Comma-
+  # separated patterns, e.g. https://app.example.com. Empty disables CORS entirely,
+  # which is correct for a deployment that serves no browser client.
+  cors:
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:}
+
   # Only trust X-Forwarded-For when the direct peer is one of these proxies.
   trusted-proxies: ${APP_TRUSTED_PROXIES:}
 
@@ -133,6 +162,12 @@ app:
     validate-on-save: ${APP_EMONCMS_VALIDATE_ON_SAVE:false}
 
   # Native Google sign-in (ID token verified locally). Browser OAuth is not used.
+  #
+  # A comma-separated list of every Google OAuth client whose ID tokens are accepted.
+  # Each platform signs in with its own client and the token's `aud` is that client, so
+  # supporting Android, macOS and desktop means listing all three. Entries must belong
+  # to this Google project: the audience is what proves a token was minted for us.
+  # Only client IDs go here - no client secret is involved in verifying an ID token.
   oauth2:
     google:
       client-id: ${APP_OAUTH2_GOOGLE_CLIENT_ID:}

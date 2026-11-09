@@ -3,7 +3,6 @@ package ma.electricwave.web
 import jakarta.validation.Valid
 import ma.electricwave.domain.Role
 import ma.electricwave.dto.AccessKeyRequest
-import ma.electricwave.dto.AccessKeyUpdateRequest
 import ma.electricwave.dto.ReplaceEmoncmsKeyRequest
 import ma.electricwave.exception.ApiException
 import ma.electricwave.service.AdminAuditService
@@ -86,19 +85,10 @@ class AdminPageController(
         authentication: Authentication,
         redirectAttributes: RedirectAttributes
     ): String = try {
-        val key = adminService.getKey(id)
-        adminService.updateKey(
-            id,
-            AccessKeyUpdateRequest(
-                resource = key.resource,
-                description = key.description,
-                isActive = !key.isActive
-            ),
-            authentication.name
-        )
+        val key = adminService.toggleKeyActive(id, authentication.name)
         redirectAttributes.addFlashAttribute(
             "message",
-            "Access key '${key.resource}' is now ${if (key.isActive) "inactive" else "active"}."
+            "Access key '${key.resource}' is now ${if (key.isActive) "active" else "inactive"}."
         )
         "redirect:/admin/dashboard"
     } catch (ex: ApiException) {

@@ -13,6 +13,7 @@ import ma.electricwave.exception.ApiException
 import ma.electricwave.repository.AccessKeyRepository
 import ma.electricwave.repository.UserRepository
 import ma.electricwave.util.EmoncmsKey
+import jakarta.persistence.EntityManager
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -29,6 +30,7 @@ class AdminService(
     private val gatewayService: EmoncmsGatewayService,
     private val auditService: AuditService,
     private val emoncmsClient: EmoncmsClient,
+    private val entityManager: EntityManager,
     @Value("\${app.emoncms.validate-on-save:false}") private val validateOnSave: Boolean
 ) {
 
@@ -137,6 +139,33 @@ class AdminService(
         return saved.toResponse()
     }
 
+    /**
+     * Toggles the active flag atomically. Returns the key as it now stands.
+     *
+     * The flag is flipped by the database rather than read, negated and written back, so
+     * two concurrent toggles cannot both act on the same observed value.
+     */
+    @Transactional
+    fun toggleKeyActive(id: Long, actorEmail: String? = null): AccessKeyResponse {
+        val key = findKey(id)
+        val resource = key.resource
+        if (accessKeyRepository.toggleActive(id, Instant.now()) == 0) {
+            throw ApiException(HttpStatus.NOT_FOUND, "Access key $id not found", "NOT_FOUND")
+        }
+        // The update bypassed the persistence context, so the loaded instance is stale.
+        entityManager.refresh(key)
+
+        accountAccessService.evictResource(resource)
+        gatewayService.evictResource(resource)
+        auditService.record(
+            "KEY_UPDATED",
+            actorEmail = actorEmail,
+            resource = resource,
+            details = mapOf("isActive" to key.isActive)
+        )
+        return key.toResponse()
+    }
+
     fun listKeys(): List<AccessKeyResponse> =
         accessKeyRepository.findAllWithUsers().map { it.toResponse() }
 
@@ -191,8 +220,20 @@ class AdminService(
         )
     }
 
-    fun listClients(): List<ClientResponse> =
-        userRepository.findAllByRoleOrderById(Role.CLIENT).map { it.toClientResponse() }
+    fun listClients(): List<ClientResponse> {
+        val clients = userRepository.findAllByRoleOrderById(Role.CLIENT)
+        // One query for every client's active resources rather than a lazy load per
+        // client. Still unbounded in the number of clients: narrowing that would change
+        // the shape of a documented response, so it is left as a deliberate follow-up.
+        val resourcesByUser = if (clients.isEmpty()) {
+            emptyMap()
+        } else {
+            accessKeyRepository.findResourcesByUserIds(clients.map { it.id })
+                .filter { it.getIsActive() }
+                .groupBy({ it.getUserId() }, { it.getResource() })
+        }
+        return clients.map { it.toClientResponse(resourcesByUser[it.id].orEmpty()) }
+    }
 
     fun stats(): AdminStatsResponse = AdminStatsResponse(
         users = AdminStatsResponse.UserStats(
@@ -209,6 +250,13 @@ class AdminService(
         ),
         links = accessKeyRepository.countLinks()
     )
+
+    /** A key this instance cannot decrypt is reported as absent rather than failing the list. */
+    private fun decryptOrNull(key: AccessKey): String? = try {
+        cryptoService.decrypt(key.emoncmsApiKeyEnc)
+    } catch (ex: Exception) {
+        null
+    }
 
     private fun findKey(id: Long): AccessKey = accessKeyRepository.findById(id).orElseThrow {
         ApiException(HttpStatus.NOT_FOUND, "Access key $id not found", "NOT_FOUND")
@@ -241,18 +289,21 @@ class AdminService(
         isActive = isActive,
         keyHint = keyHint,
         emoncmsKeyConfigured = emoncmsApiKeyEnc.isNotEmpty(),
+        emoncmsKey = decryptOrNull(this),
         linkedClients = linkedUsers.count { it.role == Role.CLIENT },
         createdAt = createdAt,
         updatedAt = updatedAt
     )
 
-    private fun ma.electricwave.domain.User.toClientResponse(): ClientResponse = ClientResponse(
+    private fun ma.electricwave.domain.User.toClientResponse(
+        activeResources: List<String>
+    ): ClientResponse = ClientResponse(
         id = id,
         email = email,
         fullName = fullName,
         role = role.name,
         provider = authProvider.name,
         verified = isVerified,
-        accessKeys = accessKeys.filter { it.isActive }.map { it.resource }
+        accessKeys = activeResources
     )
 }

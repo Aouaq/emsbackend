@@ -11,6 +11,9 @@ import org.springframework.security.access.AccessDeniedException
 import org.springframework.security.authentication.BadCredentialsException
 import org.springframework.security.authentication.DisabledException
 import org.springframework.security.core.AuthenticationException
+import org.springframework.web.HttpMediaTypeNotAcceptableException
+import org.springframework.web.HttpMediaTypeNotSupportedException
+import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -59,6 +62,22 @@ class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun handleUnreadable(ex: HttpMessageNotReadableException): ProblemDetail =
         problem(HttpStatus.BAD_REQUEST, "Malformed request body", "VALIDATION_FAILED")
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
+    fun handleMethodNotSupported(ex: HttpRequestMethodNotSupportedException): ResponseEntity<ProblemDetail> {
+        val problem = problem(HttpStatus.METHOD_NOT_ALLOWED, "Method not allowed", "METHOD_NOT_ALLOWED")
+        val builder = ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+        ex.supportedHttpMethods?.let { builder.allow(*it.toTypedArray()) }
+        return builder.body(problem)
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException::class)
+    fun handleMediaTypeNotSupported(ex: HttpMediaTypeNotSupportedException): ProblemDetail =
+        problem(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported content type", "VALIDATION_FAILED")
+
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException::class)
+    fun handleMediaTypeNotAcceptable(ex: HttpMediaTypeNotAcceptableException): ProblemDetail =
+        problem(HttpStatus.NOT_ACCEPTABLE, "Unsupported Accept header", "VALIDATION_FAILED")
 
     @ExceptionHandler(NoResourceFoundException::class)
     fun handleNotFound(ex: NoResourceFoundException): ProblemDetail =

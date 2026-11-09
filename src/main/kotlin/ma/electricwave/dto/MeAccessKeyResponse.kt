@@ -15,6 +15,12 @@ data class MeAccessKeyResponse(
     val keyHint: String,
     @field:Schema(description = "Whether the account is active", example = "true")
     val isActive: Boolean,
+    @field:Schema(
+        description = "The Emoncms read key for this account. Returned because the client " +
+            "reads Emoncms directly; only ever sent to a user the account is linked to.",
+        nullable = true
+    )
+    val emoncmsKey: String? = null,
     @field:Schema(description = "When the link was created (UTC)")
     val linkedAt: Instant
 )

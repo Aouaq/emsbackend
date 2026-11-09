@@ -3,7 +3,11 @@ package ma.electricwave.config
 import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
+import io.swagger.v3.oas.models.media.Content
+import io.swagger.v3.oas.models.media.IntegerSchema
+import io.swagger.v3.oas.models.media.MediaType
 import io.swagger.v3.oas.models.media.ObjectSchema
+import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.oas.models.media.StringSchema
 import io.swagger.v3.oas.models.security.SecurityScheme
 import io.swagger.v3.oas.models.servers.Server
@@ -63,11 +67,27 @@ class OpenApiConfig {
             .description("RFC 7807 problem details returned for API errors")
             .addProperty("type", StringSchema().example("about:blank"))
             .addProperty("title", StringSchema().example("Bad Request"))
-            .addProperty("status", io.swagger.v3.oas.models.media.IntegerSchema().example(400))
+            .addProperty("status", IntegerSchema().example(400))
             .addProperty("detail", StringSchema().example("Request validation failed"))
             .addProperty("instance", StringSchema().example("/api/auth/login"))
             .addProperty("code", StringSchema().example("VALIDATION_FAILED"))
             .addProperty("traceId", StringSchema().example("6f1a0c5e2b7d4a91"))
+
+        // Attach the ProblemDetail schema to every documented 4xx/5xx response so the
+        // error body shape actually shows up next to each operation, not just in
+        // components.schemas on its own.
+        val problemDetailMediaType = MediaType().schema(Schema<Any>().`$ref`("#/components/schemas/ProblemDetail"))
+        openApi.paths?.values?.forEach { pathItem ->
+            pathItem.readOperations().forEach { operation ->
+                operation.responses?.forEach { (statusCode, response) ->
+                    val code = statusCode.toIntOrNull()
+                    if (code != null && code >= 400 && response.content?.containsKey("application/problem+json") != true) {
+                        val content = response.content ?: Content().also { response.content = it }
+                        content["application/problem+json"] = problemDetailMediaType
+                    }
+                }
+            }
+        }
     }
 
     @Bean

@@ -42,3 +42,13 @@ out/
 ### Local environment ###
 .env
 *.log
+
+# Spring Boot loads ./config/application.yml automatically and at higher precedence
+# than the packaged one, which makes it the place for local secrets (SMTP password,
+# crypto key). Ignored so those never reach the repository; config/application.yml.example
+# is the committed template.
+# Pattern note: must be `config/*`, not `config/`. Git does not descend into an excluded
+# directory, so a negation under `config/` would never be reached and the template would
+# be ignored too.
+config/*
+!config/*.example

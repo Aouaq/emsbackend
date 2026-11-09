@@ -25,11 +25,16 @@ interface UserRepository : JpaRepository<User, Long> {
 
     fun findAllByRoleOrderById(role: Role): List<User>
 
+    /**
+     * `query` must have its LIKE metacharacters escaped by the caller with `!`; see
+     * [ma.electricwave.service.AdminUserService.escapeLikePattern]. Unescaped, a search
+     * for `%` matches every row and `_` matches any single character.
+     */
     @Query(
         """
         select u from User u
-        where lower(u.email) like lower(concat('%', :query, '%'))
-           or lower(coalesce(u.fullName, '')) like lower(concat('%', :query, '%'))
+        where lower(u.email) like lower(concat('%', :query, '%')) escape '!'
+           or lower(coalesce(u.fullName, '')) like lower(concat('%', :query, '%')) escape '!'
         """
     )
     fun searchByQuery(@Param("query") query: String, pageable: Pageable): Page<User>

@@ -227,15 +227,24 @@ class AdminManagementIntegrationTest : ApiTestSupport() {
                 .content("""{"role":"ADMIN"}""")
         ).andExpect(status().isOk)
 
+        // The role change revokes the access token it was granted under, so the token
+        // held from before the promotion no longer authenticates at all - it cannot keep
+        // asserting the CLIENT role it was minted with.
         mockMvc.perform(
             get("/api/me/keys").header(HttpHeaders.AUTHORIZATION, "Bearer ${client.accessToken}")
+        ).andExpect(status().isUnauthorized)
+
+        val promoted = login(email)
+        mockMvc.perform(
+            get("/api/me/keys").header(HttpHeaders.AUTHORIZATION, "Bearer ${promoted.accessToken}")
         ).andExpect(status().isOk)
             .andExpect(jsonPath("$.length()").value(0))
 
-        mockMvc.perform(
-            get("/api/gateway/$resource/feed/list.json")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer ${client.accessToken}")
-        ).andExpect(status().isForbidden)
+        // No gateway assertion here on purpose. The links are gone - proven by the empty
+        // list above and the 401 on the pre-promotion token - but the account is now an
+        // admin, and admins read any active resource without a link, so a 403 would be
+        // the wrong expectation. That an unlinked *client* is refused is covered by
+        // `denies access without a link and after unlinking` in GatewayIntegrationTest.
     }
 
     @Test

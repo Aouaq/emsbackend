@@ -6,6 +6,18 @@ import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.stereotype.Service
 
+/** Outcome of an attempted send, so callers can stop asserting delivery they cannot see. */
+enum class MailDelivery {
+    /** Handed to the SMTP server without error. */
+    SENT,
+
+    /** `app.mail.enabled=false`; nothing was attempted. Expected in development. */
+    DISABLED,
+
+    /** Sending was attempted and failed. The recipient has nothing. */
+    FAILED
+}
+
 @Service
 class MailService(
     private val mailSender: JavaMailSender,
@@ -18,7 +30,7 @@ class MailService(
     val enabled: Boolean
         get() = mailEnabled
 
-    fun sendVerificationCode(to: String, code: String) {
+    fun sendVerificationCode(to: String, code: String): MailDelivery =
         send(
             to,
             "Your ElectricWave verification code",
@@ -31,9 +43,8 @@ class MailService(
             """.trimIndent(),
             "verification"
         )
-    }
 
-    fun sendPasswordResetCode(to: String, code: String) {
+    fun sendPasswordResetCode(to: String, code: String): MailDelivery =
         send(
             to,
             "Your ElectricWave password reset code",
@@ -46,12 +57,11 @@ class MailService(
             """.trimIndent(),
             "password reset"
         )
-    }
 
-    private fun send(to: String, subject: String, text: String, kind: String) {
+    private fun send(to: String, subject: String, text: String, kind: String): MailDelivery {
         if (!mailEnabled) {
             log.warn("Mail is disabled (app.mail.enabled=false). {} code for {} not sent by email.", kind, to)
-            return
+            return MailDelivery.DISABLED
         }
         val message = SimpleMailMessage().apply {
             setFrom(from)
@@ -59,10 +69,12 @@ class MailService(
             this.subject = subject
             this.text = text
         }
-        try {
+        return try {
             mailSender.send(message)
+            MailDelivery.SENT
         } catch (ex: Exception) {
             log.error("Failed to send {} email to {}", kind, to, ex)
+            MailDelivery.FAILED
         }
     }
 }

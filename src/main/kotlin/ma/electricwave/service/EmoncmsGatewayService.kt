@@ -27,13 +27,18 @@ class EmoncmsGatewayService(
     private val auditService: AuditService
 ) {
 
+    // Bounded by bytes rather than entry count: a single upstream response may be up to
+    // EmoncmsClient's 5 MB ceiling, so a 1000-entry bound would admit several GB of
+    // feed data. Long ranges of /feed/data.json are exactly the shape that fills it.
     private val cache: Cache<String, GatewayResponse> = Caffeine.newBuilder()
-        .maximumSize(1000)
+        .maximumWeight(MAX_CACHE_BYTES)
+        .weigher<String, GatewayResponse> { key, response -> key.length + response.body.size }
         .expireAfterWrite(Duration.ofMillis(750))
         .build()
 
     private val inFlight = ConcurrentHashMap<String, CompletableFuture<GatewayResponse>>()
 
+    /** Reads a whitelisted Emoncms path on behalf of [userId], which must be linked to it. */
     fun fetch(
         userId: Long,
         resource: String,
@@ -51,18 +56,16 @@ class EmoncmsGatewayService(
         validateResource(resource)
         val validated = validateParams(path, params)
 
-        if (!accountAccessService.canAccess(userId, resource)) {
-            auditService.record(
-                "GATEWAY_DENIED",
-                actorUserId = userId,
-                resource = resource,
-                ipAddress = clientIp,
-                details = mapOf("path" to path)
-            )
-            throw ApiException(HttpStatus.FORBIDDEN, "Access denied", "FORBIDDEN")
+        // Link-required for everyone, admins included. The bypass that was here existed
+        // only so an admin could view customer data through this service; the client now
+        // reads Emoncms directly, so the data path is no longer this service's concern and
+        // least privilege is restored.
+        val accessKey = if (accountAccessService.canAccess(userId, resource)) {
+            accessKeyRepository.findAccessible(userId, resource).orElse(null)
+        } else {
+            null
         }
 
-        val accessKey = accessKeyRepository.findAccessible(userId, resource).orElse(null)
         if (accessKey == null) {
             auditService.record(
                 "GATEWAY_DENIED",
@@ -73,6 +76,7 @@ class EmoncmsGatewayService(
             )
             throw ApiException(HttpStatus.FORBIDDEN, "Access denied", "FORBIDDEN")
         }
+
 
         val emoncmsKey = try {
             cryptoService.decrypt(accessKey.emoncmsApiKeyEnc)
@@ -175,7 +179,7 @@ class EmoncmsGatewayService(
                     "VALIDATION_FAILED"
                 )
             }
-            if (end - start > MAX_RANGE_SECONDS) {
+            if (end - start > MAX_RANGE_MILLIS) {
                 throw ApiException(
                     HttpStatus.BAD_REQUEST,
                     "The requested range must not exceed 400 days",
@@ -227,6 +231,11 @@ class EmoncmsGatewayService(
 
     private companion object {
         val RESOURCE_PATTERN = Regex("^[a-z0-9][a-z0-9-]{0,99}$")
-        const val MAX_RANGE_SECONDS = 400L * 24 * 60 * 60
+        // Emoncms takes start/end on feed/data.json in epoch MILLISECONDS (interval stays
+        // in seconds), and the Flutter client sends DateTime.millisecondsSinceEpoch
+        // accordingly. Measuring the span in seconds turned this 400-day cap into a
+        // ~9.6-hour one, rejecting every ordinary chart request with VALIDATION_FAILED.
+        const val MAX_RANGE_MILLIS = 400L * 24 * 60 * 60 * 1000
+        const val MAX_CACHE_BYTES = 64L * 1024 * 1024
     }
 }

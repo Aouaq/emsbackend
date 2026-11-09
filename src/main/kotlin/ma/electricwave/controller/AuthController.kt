@@ -59,9 +59,15 @@ class AuthController(
             "in PostgreSQL and clears the Redis entry."
     )
     @ApiResponses(
-        ApiResponse(responseCode = "200", description = "Email verified"),
-        ApiResponse(responseCode = "400", description = "Invalid/expired code or account already verified"),
-        ApiResponse(responseCode = "404", description = "No account for this email"),
+        ApiResponse(
+            responseCode = "200",
+            description = "Email verified"
+        ),
+        ApiResponse(
+            responseCode = "400",
+            description = "Invalid/expired code, already verified, or unknown email " +
+                "(unknown email is intentionally folded into this same code to avoid account enumeration)"
+        ),
         ApiResponse(responseCode = "429", description = "Rate limit exceeded")
     )
     @PostMapping("/verify")

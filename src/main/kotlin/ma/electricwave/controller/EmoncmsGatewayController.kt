@@ -138,4 +138,5 @@ class EmoncmsGatewayController(
 
     private fun userId(jwt: Jwt): Long =
         MeService.userIdFromClaim(jwt.getClaim<Any>(JwtService.USER_ID_CLAIM))
+
 }

@@ -1,12 +1,24 @@
 # =============================================================================
 # Development profile. Every value here is a safe local default; environment
 # variables still take precedence.
+#
+# The secrets below are published in the repository. SecurityStartupValidator
+# refuses to start outside this profile while any of them is configured, by
+# comparing against the constants in config/DevelopmentDefaults.kt - keep the
+# two byte-for-byte identical or that check silently becomes a no-op.
 # =============================================================================
 
 spring:
   config:
     activate:
       on-profile: dev
+
+  # The compose.yaml values, kept here rather than in the base profile so that a
+  # deployment missing DB_* fails fast instead of silently using them.
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mydatabase}
+    username: ${DB_USER:myuser}
+    password: ${DB_PASSWORD:secret}
 
 app:
   crypto:
@@ -16,10 +28,23 @@ app:
   admin:
     email: ${APP_ADMIN_EMAIL:admin@electricwave.local}
     password: ${APP_ADMIN_PASSWORD:admin123}
+  # The real Emoncms instance. The base-profile default (localhost:8080) has nothing
+  # behind it, so every gateway read returned 502 UPSTREAM_ERROR; the Flutter client has
+  # always talked to this host directly, and the gateway proxies the same three paths.
+  emoncms:
+    base-url: ${APP_EMONCMS_BASE_URL:http://electricwave.ma/energymonitoring}
+
   mail:
     enabled: ${APP_MAIL_ENABLED:false}
   auth:
     expose-verification-code: ${APP_AUTH_EXPOSE_VERIFICATION_CODE:true}
+
+  # `flutter run -d chrome` serves on a fresh random port each launch, so development
+  # allows any localhost port rather than one that would need re-setting constantly.
+  # Credentials are off (see SecurityConfig), so a wildcard port cannot be abused to
+  # ride an existing session.
+  cors:
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
 
 springdoc:
   api-docs:

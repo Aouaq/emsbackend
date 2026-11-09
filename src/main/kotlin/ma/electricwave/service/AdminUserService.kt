@@ -7,7 +7,9 @@ import ma.electricwave.dto.AdminUserCreateRequest
 import ma.electricwave.dto.AdminUserResponse
 import ma.electricwave.dto.PageResponse
 import ma.electricwave.exception.ApiException
+import ma.electricwave.repository.AccessKeyRepository
 import ma.electricwave.repository.UserRepository
+import ma.electricwave.security.TokenRevocationService
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
@@ -19,8 +21,10 @@ import java.time.Instant
 @Service
 class AdminUserService(
     private val userRepository: UserRepository,
+    private val accessKeyRepository: AccessKeyRepository,
     private val passwordEncoder: PasswordEncoder,
     private val refreshTokenService: RefreshTokenService,
+    private val tokenRevocationService: TokenRevocationService,
     private val accountAccessService: AccountAccessService,
     private val auditService: AuditService
 ) {
@@ -62,9 +66,12 @@ class AdminUserService(
         val result = if (normalized == null) {
             userRepository.findAll(pageable)
         } else {
-            userRepository.searchByQuery(normalized, pageable)
+            userRepository.searchByQuery(escapeLikePattern(normalized), pageable)
         }
-        return PageResponse.from(result.map { it.toResponse() })
+        // Resources for the whole page in one query; mapping user.accessKeys per row
+        // lazy-loads once per user, so a full page cost 101 queries.
+        val resourcesByUser = resourcesFor(result.content.map { it.id })
+        return PageResponse.from(result.map { user -> user.toResponse(resourcesByUser[user.id].orEmpty()) })
     }
 
     @Transactional
@@ -88,7 +95,10 @@ class AdminUserService(
         }
         user.role = role
         val saved = userRepository.save(user)
-        refreshTokenService.revokeAllForUser(user.id)
+        // The old access token still carries the old `roles` claim, so revoking the
+        // refresh family alone would leave a demoted admin with admin authority until
+        // that token expired.
+        revokeEverySession(user.id)
         auditService.record(
             "ROLE_CHANGED",
             actorEmail = actorEmail,
@@ -115,7 +125,7 @@ class AdminUserService(
 
         user.disabledAt = Instant.now()
         val saved = userRepository.save(user)
-        refreshTokenService.revokeAllForUser(user.id)
+        revokeEverySession(user.id)
         accountAccessService.evictUser(user.id)
         auditService.record(
             "USER_DISABLED",
@@ -131,6 +141,7 @@ class AdminUserService(
         val user = findUser(id)
         user.disabledAt = null
         val saved = userRepository.save(user)
+        accountAccessService.evictUser(user.id)
         auditService.record(
             "USER_ENABLED",
             actorEmail = actorEmail,
@@ -142,7 +153,7 @@ class AdminUserService(
 
     fun revokeSessions(id: Long, actorEmail: String) {
         val user = findUser(id)
-        refreshTokenService.revokeAllForUser(user.id)
+        revokeEverySession(user.id)
         auditService.record(
             "SESSIONS_REVOKED",
             actorEmail = actorEmail,
@@ -151,11 +162,35 @@ class AdminUserService(
         )
     }
 
+    /**
+     * Escapes the characters LIKE treats as wildcards so a search term is matched
+     * literally. Pairs with the `escape '!'` clause on the query; the escape character
+     * itself is doubled first so it cannot be used to neutralise the others.
+     */
+    internal fun escapeLikePattern(query: String): String = query
+        .replace("!", "!!")
+        .replace("%", "!%")
+        .replace("_", "!_")
+
+    /** Revokes both halves of a session: the refresh family and any live access token. */
+    private fun revokeEverySession(userId: Long) {
+        refreshTokenService.revokeAllForUser(userId)
+        tokenRevocationService.revokeAllForUser(userId)
+    }
+
     private fun findUser(id: Long): User = userRepository.findById(id).orElseThrow {
         ApiException(HttpStatus.NOT_FOUND, "User $id not found", "NOT_FOUND")
     }
 
-    private fun User.toResponse(): AdminUserResponse = AdminUserResponse(
+    private fun resourcesFor(userIds: List<Long>): Map<Long, List<String>> {
+        if (userIds.isEmpty()) return emptyMap()
+        return accessKeyRepository.findResourcesByUserIds(userIds)
+            .groupBy({ it.getUserId() }, { it.getResource() })
+    }
+
+    private fun User.toResponse(): AdminUserResponse = toResponse(accessKeys.map { it.resource })
+
+    private fun User.toResponse(resources: List<String>): AdminUserResponse = AdminUserResponse(
         id = id,
         email = email,
         fullName = fullName,
@@ -165,6 +200,6 @@ class AdminUserService(
         createdAt = createdAt,
         lastLoginAt = lastLoginAt,
         disabled = disabledAt != null,
-        accessKeys = accessKeys.map { it.resource }
+        accessKeys = resources
     )
 }

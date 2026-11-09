@@ -21,6 +21,16 @@ class JwtService(private val jwtProperties: JwtProperties) {
     companion object {
         const val ROLES_CLAIM = "roles"
         const val USER_ID_CLAIM = "uid"
+
+        /**
+         * Issued-at in epoch milliseconds.
+         *
+         * The standard `iat` is a NumericDate and carries only seconds, which is too
+         * coarse to order a token against a revocation that happens in the same second -
+         * and that is the common case, since an admin disabling an account acts moments
+         * after the token was minted. [RevokedTokenValidator] uses this instead.
+         */
+        const val ISSUED_AT_MS_CLAIM = "iat_ms"
     }
 
     private val jwk = OctetSequenceKey.Builder(
@@ -42,6 +52,7 @@ class JwtService(private val jwtProperties: JwtProperties) {
             .id(UUID.randomUUID().toString())
             .claim(ROLES_CLAIM, listOf(user.role.name))
             .claim(USER_ID_CLAIM, user.id)
+            .claim(ISSUED_AT_MS_CLAIM, now.toEpochMilli())
             .build()
         val parameters = JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)
         return encoder.encode(parameters).tokenValue

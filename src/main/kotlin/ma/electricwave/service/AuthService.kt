@@ -22,6 +22,7 @@ import ma.electricwave.repository.UserRepository
 import ma.electricwave.security.GoogleTokenVerifier
 import ma.electricwave.security.JwtProperties
 import ma.electricwave.security.JwtService
+import ma.electricwave.security.TokenRevocationService
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.security.authentication.AuthenticationManager
@@ -43,6 +44,7 @@ class AuthService(
     private val jwtService: JwtService,
     private val jwtProperties: JwtProperties,
     private val refreshTokenService: RefreshTokenService,
+    private val tokenRevocationService: TokenRevocationService,
     private val rateLimitService: RateLimitService,
     private val rateLimitProperties: RateLimitProperties,
     private val googleTokenVerifier: GoogleTokenVerifier,
@@ -81,12 +83,24 @@ class AuthService(
         )
 
         val code = verificationCodeService.issue(email)
-        mailService.sendVerificationCode(email, code)
+        val delivery = mailService.sendVerificationCode(email, code)
 
+        // The account exists either way, so this stays 201; what changes is whether we
+        // claim an email was sent. Previously a failed SMTP call was logged and the
+        // response still told the user to check their inbox, leaving them with no code
+        // and no indication that resending was the way out.
         return RegisterResponse(
             email = email,
             verified = false,
-            message = "Registration successful. A 6-digit verification code has been sent to your email and expires in 10 minutes.",
+            message = when (delivery) {
+                MailDelivery.SENT ->
+                    "Registration successful. A 6-digit verification code has been sent to your email and expires in 10 minutes."
+                MailDelivery.DISABLED ->
+                    "Registration successful. Email delivery is disabled on this server, so no code was sent."
+                MailDelivery.FAILED ->
+                    "Registration successful, but the verification email could not be sent. Request a new code with /api/auth/verify/resend."
+            },
+            verificationCodeSent = delivery == MailDelivery.SENT,
             devVerificationCode = devCode(code)
         )
     }
@@ -102,13 +116,17 @@ class AuthService(
 
         val email = request.email.trim().lowercase()
         val user = userRepository.findByEmail(email).orElse(null)
-        val codeValid = verificationCodeService.verify(email, request.code)
-        if (user == null || user.isVerified || !codeValid) {
-            throw ApiException(
-                HttpStatus.BAD_REQUEST,
-                "Invalid or expired verification code",
-                "INVALID_CODE"
-            )
+        // Checked before touching the code: a wrong guess counts against the five
+        // attempts allowed per code, and after five the code is deleted outright. Testing
+        // the account first means attempts are only ever spent on an account that really
+        // has a pending verification, so guesses aimed at an unknown or already-verified
+        // address cannot burn anything. The error stays identical in all cases, so this
+        // reveals nothing new about which accounts exist.
+        if (user == null || user.isVerified) {
+            throw invalidVerificationCode()
+        }
+        if (!verificationCodeService.verify(email, request.code)) {
+            throw invalidVerificationCode()
         }
 
         user.isVerified = true
@@ -143,6 +161,10 @@ class AuthService(
         var devCode: String? = null
         if (user != null && !user.isVerified) {
             val code = verificationCodeService.issue(email)
+            // Delivery outcome is deliberately not reflected in the response: it would
+            // distinguish "no such account" from "account exists and mail was sent",
+            // which is the enumeration signal this endpoint exists to hide. Failures are
+            // logged by MailService.
             mailService.sendVerificationCode(email, code)
             devCode = devCode(code)
         }
@@ -170,7 +192,10 @@ class AuthService(
 
         val user = userRepository.findByEmail(email).orElse(null)
         var devCode: String? = null
-        if (user != null && user.isVerified && user.disabledAt == null) {
+        // Only accounts with a local password can be reset this way. A Google-only
+        // account (no local password) must not be silently converted to LOCAL by a
+        // forgot-password request it never initiated with a password.
+        if (user != null && user.isVerified && user.disabledAt == null && user.password != null) {
             val code = verificationCodeService.issue(email, "reset")
             mailService.sendPasswordResetCode(email, code)
             devCode = devCode(code)
@@ -212,6 +237,9 @@ class AuthService(
         userRepository.save(user)
         verificationCodeService.clear(email, "reset")
         refreshTokenService.revokeAllForUser(user.id)
+        // A reset is the recovery path for a compromised account, so live access tokens
+        // must die with the password rather than outlive it by up to app.jwt.expiration.
+        tokenRevocationService.revokeAllForUser(user.id)
         auditService.record(
             "PASSWORD_RESET",
             actorUserId = user.id,
@@ -314,6 +342,16 @@ class AuthService(
     }
 
     fun logout(request: RefreshTokenRequest, clientIp: String) {
+        // Shares the refresh budget rather than introducing a knob of its own: logout
+        // consumes the same token type and the same Redis lookups, and this was the only
+        // public auth endpoint with no limit at all.
+        rateLimitService.check(
+            "logout:ip",
+            clientIp,
+            rateLimitProperties.refreshIpPerMinute,
+            Duration.ofMinutes(1)
+        )
+
         val revoked = refreshTokenService.revoke(request.refreshToken)
         if (revoked != null) {
             auditService.record(
@@ -415,6 +453,12 @@ class AuthService(
         role = user.role.name,
         refreshToken = refreshTokenService.issue(user.id, familyId),
         expiresIn = jwtProperties.expiration.seconds
+    )
+
+    private fun invalidVerificationCode() = ApiException(
+        HttpStatus.BAD_REQUEST,
+        "Invalid or expired verification code",
+        "INVALID_CODE"
     )
 
     private fun devCode(code: String): String? =

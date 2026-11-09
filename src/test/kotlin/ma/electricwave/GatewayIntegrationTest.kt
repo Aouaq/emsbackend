@@ -161,7 +161,7 @@ class GatewayIntegrationTest : ApiTestSupport() {
 
         mockMvc.perform(
             get("/api/gateway/$resource/feed/data.json")
-                .param("id", "1").param("start", "0").param("end", "${401L * 24 * 60 * 60}")
+                .param("id", "1").param("start", "0").param("end", "${401L * 24 * 60 * 60 * 1000}")
                 .header(HttpHeaders.AUTHORIZATION, auth)
         ).andExpect(status().isBadRequest)
 
@@ -412,6 +412,92 @@ class GatewayIntegrationTest : ApiTestSupport() {
         }
 
         wireMock.verify(1, getRequestedFor(urlPathEqualTo("/feed/list.json")))
+    }
+
+    @Test
+    fun `accepts a realistic millisecond range`() {
+        // The client sends DateTime.millisecondsSinceEpoch, which is what Emoncms expects
+        // on feed/data.json. Measuring the 400-day cap in seconds made it a ~9.6-hour cap,
+        // so an ordinary one-week chart was rejected outright.
+        val key = uniqueKey()
+        val resource = uniqueResource()
+        val tokens = clientWithClaimedKey(resource, key)
+        wireMock.stubFor(
+            wiremockGet(urlPathEqualTo("/feed/data.json"))
+                .willReturn(
+                    aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""[[1700000000000,42.0]]""")
+                )
+        )
+
+        val endMs = 1_700_000_000_000L
+        val startMs = endMs - 7L * 24 * 60 * 60 * 1000
+
+        mockMvc.perform(
+            get("/api/gateway/$resource/feed/data.json")
+                .param("id", "1")
+                .param("start", startMs.toString())
+                .param("end", endMs.toString())
+                .param("interval", "3600")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer ${tokens.accessToken}")
+        ).andExpect(status().isOk)
+
+        wireMock.verify(
+            getRequestedFor(urlPathEqualTo("/feed/data.json"))
+                .withQueryParam("start", equalTo(startMs.toString()))
+                .withQueryParam("end", equalTo(endMs.toString()))
+                .withQueryParam("interval", equalTo("3600"))
+        )
+    }
+
+    @Test
+    fun `an admin without a link is refused like anyone else`() {
+        // The gateway is link-required for every role. An admin viewing customer data is
+        // served by the backend returning the Emoncms key (GET /api/admin/keys) so the
+        // client can read Emoncms itself - this service is not in the data path.
+        val key = uniqueKey()
+        val resource = uniqueResource()
+        createAccessKey(resource, key)
+        val admin = adminLogin()
+
+        mockMvc.perform(
+            get("/api/gateway/$resource/feed/list.json")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer ${admin.accessToken}")
+        ).andExpect(status().isForbidden)
+
+        wireMock.verify(0, getRequestedFor(urlPathEqualTo("/feed/list.json")))
+    }
+
+    @Test
+    fun `a client receives the Emoncms key for an account it claimed`() {
+        // What replaces the admin bypass: the key comes back to whoever is entitled to it,
+        // and the app uses it against Emoncms directly. This is also how a reinstalled app
+        // recovers, since nothing is left on the device.
+        val key = uniqueKey()
+        val resource = uniqueResource()
+        val tokens = clientWithClaimedKey(resource, key)
+
+        mockMvc.perform(
+            get("/api/me/keys").header(HttpHeaders.AUTHORIZATION, "Bearer ${tokens.accessToken}")
+        ).andExpect(status().isOk)
+            .andExpect(jsonPath("$[0].resource").value(resource))
+            .andExpect(jsonPath("$[0].emoncmsKey").value(key))
+    }
+
+    @Test
+    fun `an admin receives every registered Emoncms key`() {
+        val key = uniqueKey()
+        val resource = uniqueResource()
+        createAccessKey(resource, key)
+        val admin = adminLogin()
+
+        val body = mockMvc.perform(
+            get("/api/admin/keys").header(HttpHeaders.AUTHORIZATION, "Bearer ${admin.accessToken}")
+        ).andExpect(status().isOk).andReturn().response.contentAsString
+
+        kotlin.test.assertTrue(body.contains(key), "admin listing must carry the plaintext key")
     }
 
     private fun clientWithClaimedKey(resource: String, key: String): TokenPair {

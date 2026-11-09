@@ -74,4 +74,11 @@ allOpen {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+
+	// Spring Boot's default config locations include `./` and `./config/`, so a developer's
+	// local config/application.yml (real SMTP credentials, a Google client ID) would be
+	// loaded during tests and change their outcome - it set app.mail.enabled=true, which
+	// made the dev verification code null and failed 35 tests. Restricting the search to
+	// the classpath keeps the suite hermetic: it depends only on committed configuration.
+	systemProperty("spring.config.location", "optional:classpath:/,optional:classpath:/config/")
 }
