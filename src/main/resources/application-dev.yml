@@ -28,12 +28,6 @@ app:
   admin:
     email: ${APP_ADMIN_EMAIL:admin@electricwave.local}
     password: ${APP_ADMIN_PASSWORD:admin123}
-  # The real Emoncms instance. The base-profile default (localhost:8080) has nothing
-  # behind it, so every gateway read returned 502 UPSTREAM_ERROR; the Flutter client has
-  # always talked to this host directly, and the gateway proxies the same three paths.
-  emoncms:
-    base-url: ${APP_EMONCMS_BASE_URL:http://electricwave.ma/energymonitoring}
-
   mail:
     enabled: ${APP_MAIL_ENABLED:false}
   auth:

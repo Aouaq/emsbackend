@@ -30,7 +30,6 @@ class MeService(
     private val rateLimitService: RateLimitService,
     private val rateLimitProperties: RateLimitProperties,
     private val auditService: AuditService,
-    private val accountAccessService: AccountAccessService,
     private val cryptoService: CryptoService
 ) {
 
@@ -185,7 +184,6 @@ class MeService(
 
         user.accessKeys.add(accessKey)
         userRepository.save(user)
-        accountAccessService.evictUser(user.id)
         auditService.record(
             "KEY_LINKED",
             actorUserId = user.id,
@@ -217,7 +215,6 @@ class MeService(
 
         user.accessKeys.remove(accessKey)
         userRepository.save(user)
-        accountAccessService.evictUser(user.id)
         auditService.record(
             "KEY_UNLINKED",
             actorUserId = user.id,

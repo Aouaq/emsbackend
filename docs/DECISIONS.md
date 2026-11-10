@@ -44,7 +44,7 @@ This file records every assumption or deviation from the v1 specification.
 - Registration and Google sign-in never accept access keys. Clients start with
   zero linked accounts and claim them later through `POST /api/me/keys`.
 - Emoncms keys are stored as a SHA-256 hash for matching and as an AES-256-GCM
-  encrypted copy for the gateway. Responses expose only a short hint and whether
+  encrypted copy. Responses expose a short hint and, to an entitled caller, the key.
   a key is configured.
 - `key_hash` is a `char(64)` column as specified. Hibernate is told to expect a
   CHAR JDBC type (`@JdbcTypeCode(SqlTypes.CHAR)`) so schema validation succeeds.
@@ -209,7 +209,7 @@ This file records every assumption or deviation from the v1 specification.
   `disabledAt` on every authenticated call, so the documented `403 ACCOUNT_DISABLED`
   contract still holds if the Redis marker is ever lost.
 - Enabling a user evicts the account-access cache, mirroring what disabling does;
-  otherwise a cached negative result kept denying gateway access after the fix.
+  otherwise a cached negative result outlived the fix that was meant to clear it.
 - The first password login for a Google-created account upgrades an unverified
   local account by clearing the password and setting `authProvider=GOOGLE`. A
   later password reset converts the account back to `LOCAL` and revokes sessions.
@@ -258,20 +258,10 @@ This file records every assumption or deviation from the v1 specification.
   sessions.
 - Key replacement keeps existing client links but invalidates the old claim key.
   Admin key updates, replacement and deletion evict both the account-access
-  cache and the gateway response cache for the affected resource.
+  cache for the affected resource.
 
-## Gateway
+## Emoncms access
 
-- The gateway exposes only three fixed Emoncms paths and forwards only the
-  documented parameters for each path. Any unknown parameter, including a
-  client-supplied `apikey`, is rejected with `400 VALIDATION_FAILED`.
-- Access is checked before the 750 ms response cache is consulted. The cache is
-  shared by resource/path/query, not by user, because every caller has already
-  been authorized for the resource.
-- Admins do NOT bypass the link requirement on the gateway; it is link-required for
-  everyone. This was briefly reversed so an administrator could view customer data through
-  this service, then restored: the mobile client reads Emoncms directly, so the backend is
-  not in the data path at all. Its job is authentication and key custody.
 - Because the client reads Emoncms directly, `GET /api/me/keys` and `GET /api/admin/keys`
   return the decrypted Emoncms key to a caller entitled to it - their own linked accounts
   for a client, every account for an admin. This gives up the property that the key never
@@ -280,16 +270,25 @@ This file records every assumption or deviation from the v1 specification.
   the device. The consequence to keep in mind is that disabling an account no longer
   withdraws data access from a device that already holds the key; only rotating the key
   does that.
-- `feed/data.json` start/end are epoch MILLISECONDS, matching Emoncms and the Flutter
-  client (`DateTime.millisecondsSinceEpoch`); `interval` stays in seconds. The 400-day cap
-  is measured in milliseconds. It was previously compared against a seconds constant,
-  which silently made it a ~9.6-hour cap and rejected every ordinary chart request.
-- `app.emoncms.validate-on-save=true` validates the key against
-  `feed/list.json`. Any upstream/configuration failure during that validation is
-  mapped to `400 INVALID_KEY` for the admin save operation.
-- Caffeine `invalidateIf` is not available in the selected version, so cache
-  eviction uses `cache.asMap().keys.removeIf { ... }`.
 
+- The read-only Emoncms **gateway was removed**. It proxied three fixed feed paths
+  through `/api/gateway/**`, holding the key server-side so the device never saw it.
+  That design was abandoned once the client went back to reading Emoncms directly, and
+  the endpoints then sat unused for some time: nothing called them, and the only other
+  consumer of `app.emoncms.base-url` was an admin key validation that ships disabled.
+  Keeping an unused authenticated proxy to a private instance is attack surface for no
+  benefit, so the controller, service, HTTP client and their configuration are gone.
+  Recover them from git history if the web build ever needs a same-origin proxy to get
+  around the Emoncms CORS restriction.
+- `AccountAccessService` went with it. The gateway was the only caller of its
+  `canAccess`, so what remained was a Caffeine cache that a dozen call sites dutifully
+  evicted and nothing ever read. Its repository query `findAccessible` and the Caffeine
+  dependency itself were orphaned by the same removal and are gone too.
+- **Links are now a record, not an authorization.** `user_access_keys` still says which
+  accounts a client has claimed, and `/api/me/keys` still returns only that client's own
+  accounts, but no request is authorized by consulting a link any more. If a future
+  feature needs the backend to decide whether a user may read a resource, that check has
+  to be reintroduced deliberately rather than assumed to be there.
 ## Testing and delivery
 
 - Testcontainers currently uses `postgres:latest` and `redis:latest`, while

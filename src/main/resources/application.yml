@@ -141,7 +141,6 @@ app:
     forgot-per-email-per-hour: ${APP_RATE_LIMIT_FORGOT_PER_EMAIL_PER_HOUR:3}
     forgot-per-ip-per-hour: ${APP_RATE_LIMIT_FORGOT_PER_IP_PER_HOUR:10}
     reset-per-ip-per-10-minutes: ${APP_RATE_LIMIT_RESET_PER_IP_PER_10_MINUTES:10}
-    gateway-per-user-per-minute: ${APP_RATE_LIMIT_GATEWAY_PER_USER_PER_MINUTE:300}
     change-password-per-user-per-10-minutes: ${APP_RATE_LIMIT_CHANGE_PASSWORD_PER_USER_PER_10_MINUTES:5}
 
   # Origins allowed to call /api/** from a browser (the Flutter web build). Comma-
@@ -156,10 +155,6 @@ app:
   http:
     max-request-bytes: ${APP_HTTP_MAX_REQUEST_BYTES:1048576}
 
-  # Upstream Emoncms instance used by the read-only gateway.
-  emoncms:
-    base-url: ${APP_EMONCMS_BASE_URL:http://localhost:8080}
-    validate-on-save: ${APP_EMONCMS_VALIDATE_ON_SAVE:false}
 
   # Native Google sign-in (ID token verified locally). Browser OAuth is not used.
   #

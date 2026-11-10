@@ -75,7 +75,7 @@ class AdminKeyController(private val adminService: AdminService) {
     @Operation(
         summary = "Update an Emoncms account",
         description = "Updates resource, description and active status. Deactivation immediately blocks " +
-            "gateway access while keeping existing links."
+            "new claims while keeping existing links."
     )
     @ApiResponses(
         ApiResponse(responseCode = "200", description = "Account updated"),
@@ -95,7 +95,7 @@ class AdminKeyController(private val adminService: AdminService) {
     @Operation(
         summary = "Replace the Emoncms read key",
         description = "Replaces the stored key and invalidates the old claim code. Existing client links " +
-            "are kept and the gateway cache for the resource is evicted."
+            "are kept and the cached access lookups for the resource are evicted."
     )
     @ApiResponses(
         ApiResponse(responseCode = "200", description = "Key replaced"),

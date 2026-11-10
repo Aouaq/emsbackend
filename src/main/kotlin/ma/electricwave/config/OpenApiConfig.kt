@@ -39,9 +39,8 @@ class OpenApiConfig {
                     link via POST /api/me/keys. The backend stores only a hash and an encrypted copy
                     of the key and never returns the plaintext.
 
-                    Feed access is limited to GET /api/gateway/{resource}/feed/list.json,
-                    /feed/data.json and /feed/timevalue.json. Only the documented query parameters
-                    are forwarded; client-supplied apikey parameters are rejected.
+                    This service does not serve feed data. Clients read Emoncms directly with
+                    the key they hold; the backend only authenticates and stores keys.
                     """.trimIndent()
                 )
                 .version("1.0.0")

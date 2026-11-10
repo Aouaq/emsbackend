@@ -56,10 +56,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # Everything else the app may need - SMTP credentials, the Google client ID,
-    # production secrets - comes from a local .env, which is gitignored and whose every
-    # variable is listed in .env.example. Optional, so the stack still starts without
-    # one; nothing secret has to be written into this committed file.
+    # Optional local overrides. Keep this file for *this stack's* values only.
+    #
+    # It is not a place for deployment credentials. Everything in it is injected into the
+    # container and wins over the mounted config, so a production .env dropped here
+    # silently replaces the dev crypto master key - after which the app starts happily
+    # and returns null for every Emoncms key, because the stored rows were encrypted
+    # under the old one. That happened once already. Deployment values live in
+    # .env.production, which compose does not read.
     env_file:
       - path: .env
         required: false

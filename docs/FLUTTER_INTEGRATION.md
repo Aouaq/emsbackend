@@ -1,7 +1,6 @@
 # Flutter integration guide
 
-Base URL in development: `http://localhost:8082`. All requests and responses use
-JSON except the gateway, which returns the upstream Emoncms content type/body.
+Base URL in development: `http://localhost:8082`. All requests and responses use JSON.
 
 ## Authentication flow
 
@@ -54,28 +53,14 @@ by an administrator. Unknown, malformed and inactive keys all return the same
 `emoncmsKeyConfigured`, `isActive` and `linkedAt`. The plaintext key is never
 returned. `DELETE /api/me/keys/{id}` removes only this user's link.
 
-## Gateway
+## Reading feed data
 
-Only these paths are allowed:
+This service does not proxy Emoncms. `GET /api/me/keys` (a client's claimed accounts)
+and `GET /api/admin/keys` (every account, for an admin) return the Emoncms read key
+itself, and the app talks to Emoncms directly with it.
 
-```text
-GET /api/gateway/{resource}/feed/list.json
-GET /api/gateway/{resource}/feed/data.json?id=1&start=0&end=3600&interval=60&skipmissing=0
-GET /api/gateway/{resource}/feed/timevalue.json?id=1
-```
-
-`resource` is the lowercase account slug. `data.json` requires positive `id`,
-`start >= 0`, `end > start`, a range of at most 400 days, and optional positive
-`interval` and `skipmissing` (`0` or `1`). Do not append an `apikey` parameter or
-any other query parameter; unsupported parameters return `400 VALIDATION_FAILED`.
-
-Gateway errors:
-
-- `403 FORBIDDEN` - the account is not linked or the key is inactive.
-- `429 RATE_LIMITED` - respect `Retry-After`.
-- `502 UPSTREAM_ERROR` - Emoncms returned an error.
-- `504 UPSTREAM_TIMEOUT` - Emoncms timed out.
-- `503 NOT_CONFIGURED` - the stored key cannot be decrypted; contact an admin.
+An Emoncms gateway used to live at `/api/gateway/**`. It was removed; those paths now
+return `404`.
 
 ## Error handling
 

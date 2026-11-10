@@ -46,21 +46,6 @@ interface AccessKeyRepository : JpaRepository<AccessKey, Long> {
     fun countByIsActiveTrue(): Long
 
     @Query(
-        """
-        select k from AccessKey k
-        join k.linkedUsers u
-        where u.id = :userId
-          and k.resource = :resource
-          and k.isActive = true
-          and u.disabledAt is null
-        """
-    )
-    fun findAccessible(
-        @Param("userId") userId: Long,
-        @Param("resource") resource: String
-    ): Optional<AccessKey>
-
-    @Query(
         "select distinct k from AccessKey k left join fetch k.linkedUsers order by k.id"
     )
     fun findAllWithUsers(): List<AccessKey>

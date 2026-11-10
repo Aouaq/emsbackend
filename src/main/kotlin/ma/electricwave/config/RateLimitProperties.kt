@@ -18,6 +18,5 @@ data class RateLimitProperties(
     val forgotPerEmailPerHour: Int = 3,
     val forgotPerIpPerHour: Int = 10,
     val resetPerIpPer10Minutes: Int = 10,
-    val gatewayPerUserPerMinute: Int = 300,
     val changePasswordPerUserPer10Minutes: Int = 5
 )

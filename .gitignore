@@ -40,7 +40,12 @@ out/
 .kotlin
 
 ### Local environment ###
+# Every local env file, whatever the suffix - .env.production and friends carry the same
+# secrets as .env and are just as easy to commit by accident. The example is the one
+# that must stay tracked, so it is re-included after the wildcard.
 .env
+.env.*
+!.env.example
 *.log
 
 # Spring Boot loads ./config/application.yml automatically and at higher precedence

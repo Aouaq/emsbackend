@@ -4,8 +4,12 @@ import ma.electricwave.exception.ApiException
 import ma.electricwave.security.NimbusGoogleTokenVerifier
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
+import org.springframework.security.oauth2.core.OAuth2Error
+import org.springframework.security.oauth2.jwt.JwtException
+import org.springframework.security.oauth2.jwt.JwtValidationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -63,5 +67,45 @@ class GoogleAudienceTest {
         val verifier = NimbusGoogleTokenVerifier("   ,  , ")
 
         assertTrue(verifier.acceptedAudiences.isEmpty())
+    }
+
+    // --- expiry detection -------------------------------------------------------------
+    //
+    // Expiry is reported back as its own code so a client can drop a cached token and
+    // fetch a fresh one. The only signal Spring offers is the error description text, so
+    // these pin the matching: the real wording must be recognised, and nothing else may
+    // be mistaken for it.
+
+    private fun validationFailure(description: String) = JwtValidationException(
+        "decode failed",
+        listOf(OAuth2Error("invalid_token", description, null))
+    )
+
+    @Test
+    fun `recognises the decoder's expiry wording`() {
+        val verifier = NimbusGoogleTokenVerifier(web)
+
+        assertTrue(
+            verifier.isExpiry(validationFailure("Jwt expired at 2026-11-10T12:17:47Z"))
+        )
+    }
+
+    @Test
+    fun `does not mistake a wrong audience for expiry`() {
+        val verifier = NimbusGoogleTokenVerifier(web)
+
+        assertFalse(
+            verifier.isExpiry(
+                validationFailure("Google ID token was issued for another client")
+            )
+        )
+    }
+
+    @Test
+    fun `falls back to the message for a non-validation failure`() {
+        val verifier = NimbusGoogleTokenVerifier(web)
+
+        assertTrue(verifier.isExpiry(JwtException("Jwt expired at some point")))
+        assertFalse(verifier.isExpiry(JwtException("Signed JWT rejected: invalid signature")))
     }
 }

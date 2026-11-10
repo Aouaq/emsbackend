@@ -25,7 +25,6 @@ class AdminUserService(
     private val passwordEncoder: PasswordEncoder,
     private val refreshTokenService: RefreshTokenService,
     private val tokenRevocationService: TokenRevocationService,
-    private val accountAccessService: AccountAccessService,
     private val auditService: AuditService
 ) {
 
@@ -91,7 +90,6 @@ class AdminUserService(
         val previousRole = user.role
         if (role == Role.ADMIN && previousRole != Role.ADMIN) {
             user.accessKeys.clear()
-            accountAccessService.evictUser(user.id)
         }
         user.role = role
         val saved = userRepository.save(user)
@@ -126,7 +124,6 @@ class AdminUserService(
         user.disabledAt = Instant.now()
         val saved = userRepository.save(user)
         revokeEverySession(user.id)
-        accountAccessService.evictUser(user.id)
         auditService.record(
             "USER_DISABLED",
             actorEmail = actorEmail,
@@ -141,7 +138,6 @@ class AdminUserService(
         val user = findUser(id)
         user.disabledAt = null
         val saved = userRepository.save(user)
-        accountAccessService.evictUser(user.id)
         auditService.record(
             "USER_ENABLED",
             actorEmail = actorEmail,

@@ -240,11 +240,13 @@ class AdminManagementIntegrationTest : ApiTestSupport() {
         ).andExpect(status().isOk)
             .andExpect(jsonPath("$.length()").value(0))
 
-        // No gateway assertion here on purpose. The links are gone - proven by the empty
+        // The links are gone - proven by the empty
         // list above and the 401 on the pre-promotion token - but the account is now an
         // admin, and admins read any active resource without a link, so a 403 would be
-        // the wrong expectation. That an unlinked *client* is refused is covered by
-        // `denies access without a link and after unlinking` in GatewayIntegrationTest.
+        // the wrong expectation. Refusing an unlinked *client* used to be covered by
+        // GatewayIntegrationTest; that test went with the gateway, and nothing reads a
+        // link to authorize a request any more - links now only record which accounts a
+        // client has claimed.
     }
 
     @Test

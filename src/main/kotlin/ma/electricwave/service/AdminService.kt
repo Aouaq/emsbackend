@@ -14,7 +14,6 @@ import ma.electricwave.repository.AccessKeyRepository
 import ma.electricwave.repository.UserRepository
 import ma.electricwave.util.EmoncmsKey
 import jakarta.persistence.EntityManager
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -26,12 +25,8 @@ class AdminService(
     private val accessKeyRepository: AccessKeyRepository,
     private val userRepository: UserRepository,
     private val cryptoService: CryptoService,
-    private val accountAccessService: AccountAccessService,
-    private val gatewayService: EmoncmsGatewayService,
     private val auditService: AuditService,
-    private val emoncmsClient: EmoncmsClient,
-    private val entityManager: EntityManager,
-    @Value("\${app.emoncms.validate-on-save:false}") private val validateOnSave: Boolean
+    private val entityManager: EntityManager
 ) {
 
     @Transactional
@@ -92,10 +87,6 @@ class AdminService(
         key.isActive = request.isActive
         key.updatedAt = Instant.now()
         val saved = accessKeyRepository.save(key)
-        accountAccessService.evictResource(oldResource)
-        accountAccessService.evictResource(newResource)
-        gatewayService.evictResource(oldResource)
-        gatewayService.evictResource(newResource)
         auditService.record(
             "KEY_UPDATED",
             actorEmail = actorEmail,
@@ -129,8 +120,6 @@ class AdminService(
         key.emoncmsApiKeyEnc = cryptoService.encrypt(emoncmsKey)
         key.updatedAt = Instant.now()
         val saved = accessKeyRepository.save(key)
-        accountAccessService.evictResource(key.resource)
-        gatewayService.evictResource(key.resource)
         auditService.record(
             "EMONCMS_KEY_REPLACED",
             actorEmail = actorEmail,
@@ -155,8 +144,6 @@ class AdminService(
         // The update bypassed the persistence context, so the loaded instance is stale.
         entityManager.refresh(key)
 
-        accountAccessService.evictResource(resource)
-        gatewayService.evictResource(resource)
         auditService.record(
             "KEY_UPDATED",
             actorEmail = actorEmail,
@@ -195,8 +182,6 @@ class AdminService(
 
         user.accessKeys.removeIf { it.id == id }
         userRepository.save(user)
-        accountAccessService.evictUser(userId)
-        accountAccessService.evictResource(key.resource)
         auditService.record(
             "KEY_UNLINKED",
             actorEmail = actorEmail,
@@ -211,8 +196,6 @@ class AdminService(
         val key = findKey(id)
         val resource = key.resource
         accessKeyRepository.delete(key)
-        accountAccessService.evictResource(resource)
-        gatewayService.evictResource(resource)
         auditService.record(
             "KEY_DELETED",
             actorEmail = actorEmail,
@@ -267,16 +250,6 @@ class AdminService(
             throw ApiException(
                 HttpStatus.BAD_REQUEST,
                 "The Emoncms key must be 16 to 64 letters or digits",
-                "INVALID_KEY"
-            )
-        }
-        if (!validateOnSave) return
-        try {
-            emoncmsClient.get("/feed/list.json", emptyMap(), emoncmsKey)
-        } catch (ex: ApiException) {
-            throw ApiException(
-                HttpStatus.BAD_REQUEST,
-                "The Emoncms key could not be validated",
                 "INVALID_KEY"
             )
         }

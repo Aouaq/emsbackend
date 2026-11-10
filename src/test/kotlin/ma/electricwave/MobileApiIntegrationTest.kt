@@ -28,7 +28,6 @@ import org.springframework.context.annotation.Import
         "app.rate-limit.forgot-per-email-per-hour=1000",
         "app.rate-limit.forgot-per-ip-per-hour=1000",
         "app.rate-limit.reset-per-ip-per-10-minutes=1000",
-        "app.rate-limit.gateway-per-user-per-minute=1000",
         "app.rate-limit.change-password-per-user-per-10-minutes=1000"
     ]
 )

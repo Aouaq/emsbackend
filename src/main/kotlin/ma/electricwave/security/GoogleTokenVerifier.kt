@@ -12,6 +12,7 @@ import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.JwtException
+import org.springframework.security.oauth2.jwt.JwtValidationException
 import org.springframework.security.oauth2.jwt.JwtValidators
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.stereotype.Component
@@ -65,10 +66,23 @@ class NimbusGoogleTokenVerifier(
             // signature - and that distinction is the entire diagnosis when one platform
             // cannot sign in while another can. Collapsing every cause into a single
             // message left a log of identical lines and no way to tell them apart.
-            // The caller still gets the generic message: which check failed is not a
-            // client's business, and saying so would help someone probe for a token
-            // this server would accept.
             log.warn("Rejected Google ID token: {}", ex.message)
+
+            // Expiry is the one cause the client can act on, and the only one worth
+            // naming back. A mobile device gets its ID token from the platform's
+            // credential cache, which will keep handing back the same token after it has
+            // died; without a distinct code the app cannot tell that apart from a
+            // misconfigured audience, so it retries with the identical dead token
+            // forever. Everything else stays deliberately vague - which check failed is
+            // not a client's business, and saying so would help someone probe for a
+            // token this server would accept.
+            if (isExpiry(ex)) {
+                throw ApiException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Google ID token has expired",
+                    "GOOGLE_TOKEN_EXPIRED"
+                )
+            }
             throw ApiException(HttpStatus.UNAUTHORIZED, "Invalid Google ID token")
         } catch (ex: IllegalArgumentException) {
             log.warn("Malformed Google ID token: {}", ex.message)
@@ -114,6 +128,25 @@ class NimbusGoogleTokenVerifier(
             )
         )
         return decoder
+    }
+
+    /**
+     * Whether a decode failure was an expired token rather than any other defect.
+     *
+     * Spring models validation failures as [OAuth2Error]s carried on
+     * [JwtValidationException]; the expiry one is the default validator's, whose
+     * description reads "Jwt expired at ...". There is no status code or enum to match
+     * on, so the text is the only signal available. Matching text is fragile, which is
+     * why this fails *closed*: anything unrecognised is treated as a plain invalid
+     * token, so a wording change downgrades the client's experience rather than letting
+     * a bad token through.
+     */
+    internal fun isExpiry(ex: JwtException): Boolean {
+        val descriptions = when (ex) {
+            is JwtValidationException -> ex.errors.mapNotNull { it.description }
+            else -> listOfNotNull(ex.message)
+        }
+        return descriptions.any { it.contains("expired", ignoreCase = true) }
     }
 
     private fun claimValidator(

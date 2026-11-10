@@ -1,8 +1,8 @@
 # ElectricWave Access Backend
 
 Kotlin/Spring Boot backend for the ElectricWave Flutter application. It provides
-email/password and native Google authentication, account administration, and a
-read-only, whitelisted gateway to a private Emoncms instance.
+email/password and native Google authentication, and account administration. It does
+not serve feed data: clients read Emoncms directly with the key they are entitled to.
 
 The backend never generates claim codes. A claim code is the Emoncms read key
 printed in the QR code or embedded in the Flutter deep link. Registration does
@@ -86,12 +86,6 @@ Authenticated account:
 - `GET/POST /api/me/keys`
 - `DELETE /api/me/keys/{id}`
 
-Gateway (linked account required):
-
-- `GET /api/gateway/{resource}/feed/list.json`
-- `GET /api/gateway/{resource}/feed/data.json?id=&start=&end=&interval=&skipmissing=`
-- `GET /api/gateway/{resource}/feed/timevalue.json?id=`
-
 Admin (ROLE_ADMIN):
 
 - `GET/POST /api/admin/keys`
@@ -121,7 +115,7 @@ test writes `build/openapi.json` and checks that every v1 route is documented.
 ## Project layout
 
 - `src/main/kotlin/ma/electricwave/controller` - REST and Thymeleaf admin pages
-- `src/main/kotlin/ma/electricwave/service` - auth, account access, gateway, admin
+- `src/main/kotlin/ma/electricwave/service` - auth, account access, admin
 - `src/main/kotlin/ma/electricwave/security` - JWT, IP resolution, error handlers
 - `src/main/kotlin/ma/electricwave/domain` and `repository` - persistence
 - `src/main/resources/db/migration` - Flyway schema
