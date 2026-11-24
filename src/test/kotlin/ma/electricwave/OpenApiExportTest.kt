@@ -40,6 +40,10 @@ class OpenApiExportTest : ApiTestSupport() {
             "/api/me/logout-all",
             "/api/me/keys",
             "/api/me/keys/{id}",
+            "/api/me/alarms",
+            "/api/me/alarms/thresholds",
+            "/api/me/alarms/thresholds/{resource}",
+            "/api/me/alarms/stream",
             "/api/admin/keys",
             "/api/admin/keys/{id}",
             "/api/admin/keys/{id}/emoncms-key",
@@ -52,7 +56,12 @@ class OpenApiExportTest : ApiTestSupport() {
             "/api/admin/users/{id}/enable",
             "/api/admin/users/{id}/revoke-sessions",
             "/api/admin/audit",
-            "/api/admin/stats"
+            "/api/admin/stats",
+            "/api/admin/alarms",
+            "/api/admin/alarms/summary",
+            "/api/admin/alarms/stream",
+            "/api/admin/alarms/thresholds",
+            "/api/admin/alarms/thresholds/{accessKeyId}"
         ).forEach { path ->
             assertTrue(paths.containsKey(path), "missing OpenAPI path $path")
         }

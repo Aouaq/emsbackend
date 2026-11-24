@@ -48,3 +48,14 @@ app:
       - resource: ctm01
         key: replace-with-the-emoncms-read-key
         description: Optional, defaults to the resource name
+
+    # Optional per-site alarm limits, applied on first boot only where the site has
+    # no row yet. Never overwrites an operator's tuning. Omit the block entirely to
+    # leave every site on the fleet defaults in application.yml.
+    #
+    # A null/absent limit DISABLES that check - it does not fall back to the default.
+    # Only the absence of a whole entry does that, so give both values.
+    alarm-thresholds:
+      - resource: ctm01
+        max-power: 1500
+        min-voltage: 210

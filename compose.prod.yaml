@@ -1,0 +1,180 @@
+# =============================================================================
+# Deployment stack. Separate from compose.yaml on purpose.
+#
+# compose.yaml is a *development* file: it defaults SPRING_PROFILES_ACTIVE back to
+# `dev` - overriding the `prod` the image pins - so it boots on the published
+# development JWT signing key, crypto master key and admin password. It also hardcodes
+# the database password and publishes Postgres and Redis on every interface. It says so
+# itself, above the app service. Running it on a VPS would be worse than the long
+# `docker run` lines it replaces, which is why this is a second file rather than an
+# edit to that one.
+#
+#   docker compose -f compose.prod.yaml --env-file .env.production up -d
+#
+# EMS_IMAGE is required and has no default, so a deployment must name the version it is
+# deploying. `latest` is not a version: it makes "roll back to what was working" a
+# question nobody can answer.
+#
+#   EMS_IMAGE=aouaq/emsbackend:1.0.1 docker compose -f compose.prod.yaml ... up -d
+# =============================================================================
+
+volumes:
+  # Named, so a `docker compose up` that recreates the container reattaches the same
+  # data instead of silently starting against an empty one. The development file
+  # learned this the hard way with Postgres.
+  ems-postgres-data:
+
+  # Redis is not a cache here. It is the only store for refresh tokens, so losing it
+  # signs out every user at once - a thirty-day session ended by restarting a container
+  # nobody thought held anything.
+  ems-redis-data:
+
+networks:
+  # Internal by default. Nothing below publishes a database or cache port, so the only
+  # way in is the application, and the only thing the application listens on is
+  # loopback (see its ports entry).
+  ems:
+    driver: bridge
+
+services:
+  postgres:
+    image: 'postgres:16'
+    restart: unless-stopped
+    networks: ['ems']
+    environment:
+      - 'POSTGRES_DB=${DB_NAME:?set DB_NAME}'
+      - 'POSTGRES_USER=${DB_USER:?set DB_USER}'
+      - 'POSTGRES_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD}'
+    volumes:
+      - 'ems-postgres-data:/var/lib/postgresql/data'
+    # No `ports`. The application reaches it over the compose network by service name;
+    # publishing it would put the database on the VPS's public interface, which is what
+    # the development file does with an ephemeral port and is fine only on a laptop.
+    #
+    # To take a dump, go through the container: `docker compose -f compose.prod.yaml
+    # exec postgres pg_dump -U "$DB_USER" "$DB_NAME"`.
+    #
+    # Ubuntu's AppArmor profile denies the signal `gosu` sends during first-run
+    # initialisation, so the entrypoint hangs and the database is never created - the
+    # container stays "running but unhealthy" with an empty volume. This exempts one
+    # container rather than weakening the host policy, which is the trade that was made
+    # when this bit the first deployment.
+    security_opt:
+      - 'apparmor:unconfined'
+    command:
+      - 'postgres'
+      # Defaults are sized for a machine that is only a database. On a 2 GB box shared
+      # with Redis and a JVM, 100 idle connection slots and a large shared buffer are
+      # memory this stack does not have. The pool above it asks for 20.
+      - '-c'
+      - 'max_connections=50'
+      - '-c'
+      - 'shared_buffers=128MB'
+    mem_limit: 384m
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: 'redis:7'
+    restart: unless-stopped
+    networks: ['ems']
+    # Three things, each load-bearing:
+    #
+    # --requirepass: this instance holds every refresh token, so reaching it is enough
+    #   to mint sessions for the whole fleet. Unauthenticated is survivable only while
+    #   nothing can route to it; it is not a property to depend on.
+    # --appendonly: the stock snapshot rules write at best once a minute and only after
+    #   enough changes, so a restart drops whatever arrived since - and a dropped
+    #   refresh token is a user signed out.
+    # --maxmemory-policy volatile-ttl: a bound without a policy means writes start
+    #   failing when it fills. Every key here has a TTL, and evicting the nearest
+    #   expiry first discards rate-limit counters and verification codes long before it
+    #   touches a thirty-day refresh token. Degrading by forgetting who is being rate
+    #   limited is survivable; degrading by signing everyone out is not.
+    command:
+      - 'redis-server'
+      - '--requirepass'
+      - '${REDIS_PASSWORD:?set REDIS_PASSWORD}'
+      - '--appendonly'
+      - 'yes'
+      - '--maxmemory'
+      - '96mb'
+      - '--maxmemory-policy'
+      - 'volatile-ttl'
+    volumes:
+      - 'ems-redis-data:/data'
+    mem_limit: 128m
+    healthcheck:
+      # --no-auth-warning: redis-cli otherwise writes a notice about passwords on
+      # the command line into the health log every ten seconds, forever.
+      test:
+        [
+          'CMD',
+          'redis-cli',
+          '-a',
+          '${REDIS_PASSWORD:?set REDIS_PASSWORD}',
+          '--no-auth-warning',
+          'ping',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  app:
+    image: '${EMS_IMAGE:?set EMS_IMAGE to a versioned tag, e.g. aouaq/emsbackend:1.0.1}'
+    restart: unless-stopped
+    networks: ['ems']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Loopback only. Put the TLS terminator (nginx, Caddy, Traefik) in front and have
+    # it proxy to 127.0.0.1:8082; binding 0.0.0.0 would serve the API over plain HTTP
+    # on the public interface beside it, and bearer tokens do not survive that.
+    #
+    # The reverse proxy must also set X-Forwarded-For, and APP_TRUSTED_PROXIES must
+    # name it - otherwise every request appears to come from the proxy and the rate
+    # limiter buckets the whole internet together.
+    ports:
+      - '127.0.0.1:8082:8082'
+    env_file:
+      - path: .env.production
+        required: true
+    environment:
+      # Pinned, not inherited. These are the sibling services on the compose network,
+      # whatever .env.production happens to say - that file describes the application's
+      # own view and its DB_HOST is routinely a hostname that means something else here.
+      - 'SPRING_PROFILES_ACTIVE=prod'
+      - 'DB_HOST=postgres'
+      - 'DB_PORT=5432'
+      - 'REDIS_HOST=redis'
+      - 'REDIS_PORT=6379'
+    # The image's JAVA_TOOL_OPTIONS sizes the heap as a percentage of this number, so
+    # this one value governs the JVM. 768m of a 2 GB box, leaving room for Postgres,
+    # Redis and the OS page cache.
+    mem_limit: 768m
+    # Declared in the image too, so a plain `docker run` is covered; repeated here so
+    # `depends_on: service_healthy` has something to wait on and the interval is
+    # visible beside the thing it watches.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'curl -fsS http://localhost:8082/actuator/health/readiness || exit 1',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Cold start measured at roughly 35s: Flyway, Hibernate and the security wiring.
+      start_period: 90s
+    logging:
+      # Unbounded JSON logs are a slow way to fill a small VPS's disk, and a full disk
+      # takes Postgres down with it.
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'

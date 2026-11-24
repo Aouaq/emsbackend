@@ -21,7 +21,8 @@
             <span th:text="${stats.users.disabled}">0</span> disabled) &middot;
             <span th:text="${stats.accessKeys.total}">0</span> Emoncms accounts
             (<span th:text="${stats.accessKeys.active}">0</span> active) &middot;
-            <span th:text="${stats.links}">0</span> client links
+            <span th:text="${stats.links}">0</span> client links &middot;
+            <a th:href="@{/admin/alarms}"><span th:text="${stats.alarms.open}">0</span> open alarm(s)</a>
         </p>
     </div>
 

@@ -1,7 +1,9 @@
 package ma.electricwave.service
 
 import ma.electricwave.domain.AccessKey
+import ma.electricwave.domain.AlarmKind
 import ma.electricwave.domain.Role
+import ma.electricwave.domain.SitePreference
 import ma.electricwave.dto.AccessKeyRequest
 import ma.electricwave.dto.AccessKeyResponse
 import ma.electricwave.dto.AccessKeyUpdateRequest
@@ -11,6 +13,8 @@ import ma.electricwave.dto.LinkedClientResponse
 import ma.electricwave.dto.ReplaceEmoncmsKeyRequest
 import ma.electricwave.exception.ApiException
 import ma.electricwave.repository.AccessKeyRepository
+import ma.electricwave.repository.AlarmRepository
+import ma.electricwave.repository.SitePreferenceRepository
 import ma.electricwave.repository.UserRepository
 import ma.electricwave.util.EmoncmsKey
 import jakarta.persistence.EntityManager
@@ -24,8 +28,10 @@ import java.time.Instant
 class AdminService(
     private val accessKeyRepository: AccessKeyRepository,
     private val userRepository: UserRepository,
+    private val alarmRepository: AlarmRepository,
     private val cryptoService: CryptoService,
     private val auditService: AuditService,
+    private val sitePreferenceRepository: SitePreferenceRepository,
     private val entityManager: EntityManager
 ) {
 
@@ -153,8 +159,25 @@ class AdminService(
         return key.toResponse()
     }
 
-    fun listKeys(): List<AccessKeyResponse> =
-        accessKeyRepository.findAllWithUsers().map { it.toResponse() }
+    /**
+     * Every registered account, carrying the **caller's own** site preferences.
+     *
+     * [callerUserId] is nullable so an internal caller that only wants the accounts need
+     * not invent one: passing null leaves the preference fields empty rather than
+     * showing somebody else's, which is the only safe default for a personal field on a
+     * fleet-wide listing.
+     */
+    fun listKeys(callerUserId: Long? = null): List<AccessKeyResponse> {
+        // One query for the caller's whole set, joined in memory - the same shape the
+        // client listing uses, and for the same reason: a lookup per site would cost a
+        // dozen round trips to render a list already in hand.
+        val preferences = callerUserId
+            ?.let { id ->
+                sitePreferenceRepository.findAllByUserId(id).associateBy { it.accessKeyId }
+            }
+            ?: emptyMap()
+        return accessKeyRepository.findAllWithUsers().map { it.toResponse(preferences[it.id]) }
+    }
 
     fun getKey(id: Long): AccessKeyResponse = findKey(id).toResponse()
 
@@ -231,7 +254,13 @@ class AdminService(
             active = accessKeyRepository.countByIsActiveTrue(),
             inactive = accessKeyRepository.count() - accessKeyRepository.countByIsActiveTrue()
         ),
-        links = accessKeyRepository.countLinks()
+        links = accessKeyRepository.countLinks(),
+        alarms = AdminStatsResponse.AlarmStats(
+            open = alarmRepository.countByClearedAtIsNull(),
+            overPower = alarmRepository.countByClearedAtIsNullAndKind(AlarmKind.OVER_POWER),
+            underVoltage = alarmRepository.countByClearedAtIsNullAndKind(AlarmKind.UNDER_VOLTAGE),
+            total = alarmRepository.count()
+        )
     )
 
     /** A key this instance cannot decrypt is reported as absent rather than failing the list. */
@@ -255,7 +284,9 @@ class AdminService(
         }
     }
 
-    private fun AccessKey.toResponse(): AccessKeyResponse = AccessKeyResponse(
+    private fun AccessKey.toResponse(
+        preference: SitePreference? = null
+    ): AccessKeyResponse = AccessKeyResponse(
         id = id,
         resource = resource,
         description = description,
@@ -265,7 +296,13 @@ class AdminService(
         emoncmsKey = decryptOrNull(this),
         linkedClients = linkedUsers.count { it.role == Role.CLIENT },
         createdAt = createdAt,
-        updatedAt = updatedAt
+        updatedAt = updatedAt,
+        name = preference?.name,
+        region = preference?.region,
+        addressDetail = preference?.addressDetail,
+        latitude = preference?.latitude,
+        longitude = preference?.longitude,
+        imageUrl = preference?.imageUrl
     )
 
     private fun ma.electricwave.domain.User.toClientResponse(

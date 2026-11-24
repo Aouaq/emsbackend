@@ -62,6 +62,29 @@ itself, and the app talks to Emoncms directly with it.
 An Emoncms gateway used to live at `/api/gateway/**`. It was removed; those paths now
 return `404`.
 
+## Alarms
+
+- `GET /api/me/alarms` returns `alarms`, `lastSweepAt` and `monitoringEnabled`.
+  Alarms are newest first and cover only the caller's claimed accounts. An empty
+  list with `monitoringEnabled=false`, or a `lastSweepAt` that stopped moving,
+  means nothing is watching - not that the fleet is quiet.
+- `GET /api/me/alarms/thresholds` lists the effective limits per claimed site.
+- `PUT /api/me/alarms/thresholds/{resource}` sets `maxPower` and `minVoltage`. A
+  null limit disables that check; it is not zero. `usingDefaults` reports whether
+  a site-specific row exists.
+- `GET /api/me/alarms/stream` is Server-Sent Events: `ready` on connect, `alarm`
+  when one is raised, `cleared` when it resolves, plus comment heartbeats. History
+  is not replayed; read it from the list endpoint.
+- Administrators use the parallel `/api/admin/alarms` endpoints instead: the list
+  is paged and accepts `active`, `kind` and `resource` filters, `/summary` carries
+  `lastSweepAt` and `monitoringEnabled`, and `/thresholds` is keyed by
+  `accessKeyId` rather than resource. `GET /api/admin/alarms/stream` emits the same
+  `ready` / `alarm` / `cleared` events for the whole fleet.
+- The two scopes are disjoint. An admin is deliberately not linked to the sites
+  they manage (promotion clears their links), so `/api/me/alarms*` returns an empty
+  list and a stream that only ever sends `ready`. Choose the endpoint by the
+  session's `role`, not by whether the client can see the site in `/api/admin/keys`.
+
 ## Error handling
 
 Every error is a `ProblemDetail` object. Read the `code` property, not the HTTP
@@ -99,5 +122,9 @@ On `403 ACCOUNT_DISABLED`, do not retry; tell the user to contact an administrat
 
 ## Admin pages
 
-The server-rendered admin UI is at `/admin/dashboard`, `/admin/users` and
-`/admin/audit`. It uses form login and CSRF; it is separate from the Flutter API.
+The server-rendered admin UI is at `/admin/dashboard`, `/admin/alarms`,
+`/admin/users` and `/admin/audit`. The alarms page lists the whole fleet and edits
+per-site thresholds: a blank limit disables that check, and "Use defaults" removes
+the site-specific row. The same operations are available over
+`/api/admin/alarms/**` with an admin token. It uses form login and CSRF; it is
+separate from the Flutter API.

@@ -41,6 +41,9 @@ interface AccessKeyRepository : JpaRepository<AccessKey, Long> {
 
     fun findByResource(resource: String): Optional<AccessKey>
 
+    /** Used by the admin alarm filter, where the resource arrives from a query string. */
+    fun findByResourceIgnoreCase(resource: String): Optional<AccessKey>
+
     fun findAllByIsActiveTrueOrderByResource(): List<AccessKey>
 
     fun countByIsActiveTrue(): Long

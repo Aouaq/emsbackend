@@ -1,14 +1,13 @@
 package ma.electricwave.service
 
+import ma.electricwave.service.mail.MailTransport
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.mail.javamail.JavaMailSender
-import org.springframework.mail.SimpleMailMessage
 import org.springframework.stereotype.Service
 
 /** Outcome of an attempted send, so callers can stop asserting delivery they cannot see. */
 enum class MailDelivery {
-    /** Handed to the SMTP server without error. */
+    /** Accepted by the transport without error. */
     SENT,
 
     /** `app.mail.enabled=false`; nothing was attempted. Expected in development. */
@@ -20,7 +19,7 @@ enum class MailDelivery {
 
 @Service
 class MailService(
-    private val mailSender: JavaMailSender,
+    private val transport: MailTransport,
     @Value("\${app.mail.enabled}") private val mailEnabled: Boolean,
     @Value("\${app.mail.from}") private val from: String
 ) {
@@ -58,19 +57,20 @@ class MailService(
             "password reset"
         )
 
+    /**
+     * What is sent and whether to send at all is decided here; how it travels is
+     * [MailTransport]'s business. The two are separated because a deployed platform can
+     * block SMTP outright - see
+     * [ma.electricwave.service.mail.BrevoMailTransport] - and that is a question about
+     * the network, not about verification emails.
+     */
     private fun send(to: String, subject: String, text: String, kind: String): MailDelivery {
         if (!mailEnabled) {
             log.warn("Mail is disabled (app.mail.enabled=false). {} code for {} not sent by email.", kind, to)
             return MailDelivery.DISABLED
         }
-        val message = SimpleMailMessage().apply {
-            setFrom(from)
-            setTo(to)
-            this.subject = subject
-            this.text = text
-        }
         return try {
-            mailSender.send(message)
+            transport.send(from, to, subject, text)
             MailDelivery.SENT
         } catch (ex: Exception) {
             log.error("Failed to send {} email to {}", kind, to, ex)

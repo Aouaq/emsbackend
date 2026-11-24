@@ -2,14 +2,17 @@ package ma.electricwave.service
 
 import ma.electricwave.config.RateLimitProperties
 import ma.electricwave.domain.AccessKey
+import ma.electricwave.domain.SitePreference
 import ma.electricwave.domain.User
 import ma.electricwave.dto.ChangePasswordRequest
 import ma.electricwave.dto.ClaimKeyRequest
 import ma.electricwave.dto.MeAccessKeyResponse
 import ma.electricwave.dto.MeResponse
+import ma.electricwave.dto.SitePreferenceRequest
 import ma.electricwave.dto.UpdateProfileRequest
 import ma.electricwave.exception.ApiException
 import ma.electricwave.repository.AccessKeyRepository
+import ma.electricwave.repository.SitePreferenceRepository
 import ma.electricwave.repository.UserRepository
 import ma.electricwave.security.TokenRevocationService
 import ma.electricwave.util.EmoncmsKey
@@ -30,7 +33,8 @@ class MeService(
     private val rateLimitService: RateLimitService,
     private val rateLimitProperties: RateLimitProperties,
     private val auditService: AuditService,
-    private val cryptoService: CryptoService
+    private val cryptoService: CryptoService,
+    private val sitePreferenceRepository: SitePreferenceRepository
 ) {
 
     fun get(userId: Long): MeResponse = requireUser(userId).toMeResponse()
@@ -108,20 +112,86 @@ class MeService(
     fun listKeys(userId: Long): List<MeAccessKeyResponse> {
         val linkedAt = accessKeyRepository.findLinkedByUserId(userId)
             .associate { it.getAccessKeyId() to it.getLinkedAt() }
+        // The whole set in one query, joined in memory. A client with a dozen sites
+        // would otherwise cost a dozen lookups to render a list it already holds.
+        val preferences = sitePreferenceRepository.findAllByUserId(userId)
+            .associateBy { it.accessKeyId }
         return requireUser(userId).accessKeys
             .sortedBy { it.resource }
             .map { key ->
-                MeAccessKeyResponse(
-                    id = key.id,
-                    resource = key.resource,
-                    description = key.description,
-                    keyHint = key.keyHint,
-                    isActive = key.isActive,
-                    emoncmsKey = decryptOrNull(key),
-                    linkedAt = linkedAt[key.id] ?: Instant.now()
-                )
+                toKeyResponse(key, preferences[key.id], linkedAt[key.id] ?: Instant.now())
             }
     }
+
+    /**
+     * Sets this user's own name, location or photo for one site.
+     *
+     * **The link is the authorisation.** Without that check any signed-in user could
+     * relabel a site they were never given - and, once photos land, hang an image off
+     * it. An unlinked id is a 404 rather than a 403 on purpose: whether a site exists
+     * is not something a stranger should be able to probe.
+     *
+     * A null field is left alone, so a client changing only the name need not send the
+     * address back. A blank string clears that field and returns it to the fallback.
+     * Coordinates have no blank, so a pin can be moved but not removed; dropping one
+     * would need a flag of its own, and nothing asks for that yet.
+     */
+    @Transactional
+    fun updateSitePreference(
+        userId: Long,
+        accessKeyId: Long,
+        request: SitePreferenceRequest
+    ): MeAccessKeyResponse {
+        val user = requireUser(userId)
+        // An admin is deliberately **not** linked to the sites they manage, yet theirs is
+        // the account that sees the whole fleet. A link alone as the way in made this
+        // unusable from the one account that most needs it, so an admin may address any
+        // registered site. The row stays personal either way: it is keyed to this user,
+        // not to the site, so nothing an admin writes reaches a client's view.
+        val key = user.accessKeys.firstOrNull { it.id == accessKeyId }
+            ?: accessKeyRepository.findById(accessKeyId)
+                .filter { user.isAdmin() }
+                .orElseThrow { ApiException(HttpStatus.NOT_FOUND, "No such linked account") }
+
+        val preference = sitePreferenceRepository
+            .findByUserIdAndAccessKeyId(userId, accessKeyId)
+            .orElseGet { SitePreference(userId = userId, accessKeyId = accessKeyId) }
+
+        request.name?.let { preference.name = it.trim().ifBlank { null } }
+        request.region?.let { preference.region = it.trim().ifBlank { null } }
+        request.addressDetail?.let { preference.addressDetail = it.trim().ifBlank { null } }
+        request.latitude?.let { preference.latitude = it }
+        request.longitude?.let { preference.longitude = it }
+        request.imageUrl?.let { preference.imageUrl = it.trim().ifBlank { null } }
+        preference.updatedAt = Instant.now()
+
+        val saved = sitePreferenceRepository.save(preference)
+        val linkedAt = accessKeyRepository.findLinkedByUserId(userId)
+            .firstOrNull { it.getAccessKeyId() == accessKeyId }
+            ?.getLinkedAt()
+        return toKeyResponse(key, saved, linkedAt ?: Instant.now())
+    }
+
+    /** One place that maps a key plus its optional preference, so the two paths agree. */
+    private fun toKeyResponse(
+        key: AccessKey,
+        preference: SitePreference?,
+        linkedAt: Instant
+    ) = MeAccessKeyResponse(
+        id = key.id,
+        resource = key.resource,
+        description = key.description,
+        keyHint = key.keyHint,
+        isActive = key.isActive,
+        emoncmsKey = decryptOrNull(key),
+        linkedAt = linkedAt,
+        name = preference?.name,
+        region = preference?.region,
+        addressDetail = preference?.addressDetail,
+        latitude = preference?.latitude,
+        longitude = preference?.longitude,
+        imageUrl = preference?.imageUrl
+    )
 
     /**
      * A key encrypted under a master key this instance no longer holds cannot be read.

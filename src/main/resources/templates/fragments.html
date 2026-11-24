@@ -21,6 +21,7 @@
         .badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
         .ok { background: #dcf5e3; color: #116632; }
         .off { background: #fbe3e4; color: #9b1c20; }
+        .warn { background: #fdf1d6; color: #7a4b00; }
         .btn { display: inline-block; background: #0b5cad; color: #fff; border: none; border-radius: 6px; padding: 0.55rem 1.1rem; font-size: 0.95rem; cursor: pointer; text-decoration: none; }
         .btn:hover { background: #084a8e; }
         .alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
@@ -28,17 +29,19 @@
         .alert-err { background: #fbe3e4; color: #9b1c20; border: 1px solid #f1b3b6; }
         .field { margin-bottom: 1rem; }
         .field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
-        .field input[type=text], .field input[type=password], .field input[type=email], .field textarea { width: 100%; padding: 0.5rem 0.65rem; border: 1px solid #c9d3db; border-radius: 6px; font-size: 0.95rem; }
+        .field input[type=text], .field input[type=password], .field input[type=email], .field input[type=number], .field textarea { width: 100%; padding: 0.5rem 0.65rem; border: 1px solid #c9d3db; border-radius: 6px; font-size: 0.95rem; }
         .field .error { color: #9b1c20; font-size: 0.8rem; margin-top: 0.25rem; }
         .checkbox { display: flex; align-items: center; gap: 0.5rem; }
         .muted { color: #64778a; font-size: 0.85rem; }
         .actions { margin-top: 1.25rem; display: flex; gap: 0.75rem; }
+        select { padding: 0.5rem 0.65rem; border: 1px solid #c9d3db; border-radius: 6px; font-size: 0.95rem; background: #fff; }
     </style>
 </head>
 <body>
 <nav th:fragment="nav(active)">
     <span class="brand">ElectricWave Admin</span>
     <a th:href="@{/admin/dashboard}" th:classappend="${active == 'dashboard'} ? 'active'" href="#">Dashboard</a>
+    <a th:href="@{/admin/alarms}" th:classappend="${active == 'alarms'} ? 'active'" href="#">Alarms</a>
     <a th:href="@{/admin/keys/new}" th:classappend="${active == 'new-key'} ? 'active'" href="#">Add Key</a>
     <a th:href="@{/admin/users}" th:classappend="${active == 'users'} ? 'active'" href="#">Users</a>
     <a th:href="@{/admin/audit}" th:classappend="${active == 'audit'} ? 'active'" href="#">Audit</a>

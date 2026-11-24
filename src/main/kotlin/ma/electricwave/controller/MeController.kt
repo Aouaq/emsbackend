@@ -11,6 +11,7 @@ import ma.electricwave.dto.ChangePasswordRequest
 import ma.electricwave.dto.ClaimKeyRequest
 import ma.electricwave.dto.MeAccessKeyResponse
 import ma.electricwave.dto.MeResponse
+import ma.electricwave.dto.SitePreferenceRequest
 import ma.electricwave.dto.UpdateProfileRequest
 import ma.electricwave.security.ClientIpResolver
 import ma.electricwave.security.JwtService
@@ -107,6 +108,26 @@ class MeController(
     @GetMapping("/keys")
     fun listKeys(@AuthenticationPrincipal jwt: Jwt): List<MeAccessKeyResponse> =
         meService.listKeys(userId(jwt))
+
+    @Operation(
+        summary = "Rename a site, or set its location or photo",
+        description = "Applies to the caller's own view only: a site is shared by everyone " +
+            "linked to it, and these fields are not. A field left out, or sent null, is " +
+            "unchanged; a blank string clears it. Returns the site as the caller now sees it."
+    )
+    @ApiResponses(
+        ApiResponse(responseCode = "200", description = "Site updated"),
+        ApiResponse(responseCode = "400", description = "Validation failed"),
+        ApiResponse(responseCode = "401", description = "Missing or invalid access token"),
+        ApiResponse(responseCode = "404", description = "No account with that id is linked to the caller")
+    )
+    @PatchMapping("/sites/{accessKeyId}")
+    fun updateSite(
+        @AuthenticationPrincipal jwt: Jwt,
+        @PathVariable accessKeyId: Long,
+        @Valid @RequestBody request: SitePreferenceRequest
+    ): MeAccessKeyResponse =
+        meService.updateSitePreference(userId(jwt), accessKeyId, request)
 
     @Operation(
         summary = "Claim an Emoncms account",

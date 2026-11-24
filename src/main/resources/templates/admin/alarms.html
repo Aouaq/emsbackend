@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments :: head('Alarms')}"></head>
+<body>
+<nav th:replace="~{fragments :: nav('alarms')}"></nav>
+<main>
+    <h1>Alarms</h1>
+
+    <div class="alert alert-ok" th:if="${message}" th:text="${message}"></div>
+    <div class="alert alert-err" th:if="${errorMessage}" th:text="${errorMessage}"></div>
+
+    <div class="card" style="margin-bottom:1rem;">
+        <strong>Fleet overview</strong>
+        <p class="muted" style="margin:0.5rem 0 0;">
+            <span th:text="${summary.open}">0</span> open
+            (<span th:text="${summary.overPower}">0</span> over-power,
+            <span th:text="${summary.underVoltage}">0</span> under-voltage) &middot;
+            <span th:text="${summary.total}">0</span> recorded &middot;
+            monitoring <span th:text="${summary.monitoringEnabled} ? 'enabled' : 'disabled'">enabled</span>
+            <span th:if="${summary.lastSweepAt}">
+                &middot; last sweep <span th:text="${summary.lastSweepAt}"></span>
+            </span>
+        </p>
+        <div class="alert alert-err" th:unless="${summary.monitoringEnabled}" style="margin-top:0.75rem; margin-bottom:0;">
+            Site monitoring is disabled on this instance. No alarm will be raised or cleared until
+            <code>app.monitor.enabled=true</code> and the scheduled sweep runs.
+        </div>
+        <div class="alert alert-err" th:if="${summary.monitoringEnabled and summary.lastSweepAt == null}" style="margin-top:0.75rem; margin-bottom:0;">
+            Site monitoring is enabled but no sweep has completed yet.
+        </div>
+    </div>
+
+    <form th:action="@{/admin/alarms}" method="get" class="card"
+          style="margin-bottom:1rem; display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
+        <div class="field" style="margin-bottom:0;">
+            <label for="state">State</label>
+            <select id="state" name="state">
+                <option value="open" th:selected="${state == 'open'}">Open</option>
+                <option value="cleared" th:selected="${state == 'cleared'}">Cleared</option>
+                <option value="all" th:selected="${state == 'all'}">All</option>
+            </select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+            <label for="kind">Kind</label>
+            <select id="kind" name="kind">
+                <option value="" th:selected="${kind == null}">All kinds</option>
+                <option value="OVER_POWER" th:selected="${kind == 'OVER_POWER'}">Over power</option>
+                <option value="UNDER_VOLTAGE" th:selected="${kind == 'UNDER_VOLTAGE'}">Under voltage</option>
+            </select>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+            <label for="resource">Resource</label>
+            <select id="resource" name="resource">
+                <option value="" th:selected="${resource == null}">All resources</option>
+                <option th:each="t : ${thresholds}"
+                        th:value="${t.resource}"
+                        th:text="${t.resource}"
+                        th:selected="${resource == t.resource}"></option>
+            </select>
+        </div>
+        <button type="submit" class="btn">Filter</button>
+    </form>
+
+    <div class="card">
+        <table>
+            <thead>
+            <tr>
+                <th>State</th>
+                <th>Severity</th>
+                <th>Resource</th>
+                <th>Kind</th>
+                <th>Value / limit</th>
+                <th>Raised</th>
+                <th>Cleared</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="a : ${alarms.content}">
+                <td>
+                    <span class="badge" th:classappend="${a.active} ? 'off' : 'ok'"
+                          th:text="${a.active} ? 'OPEN' : 'CLEARED'">OPEN</span>
+                </td>
+                <td>
+                    <span class="badge" th:classappend="${a.severity == 'FAULT'} ? 'off' : 'warn'"
+                          th:text="${a.severity}">FAULT</span>
+                </td>
+                <td th:text="${a.resource}"></td>
+                <td><code th:text="${a.kind}"></code></td>
+                <td><span th:text="${a.value}"></span> / <span th:text="${a.threshold}"></span></td>
+                <td class="muted" th:text="${a.raisedAt}"></td>
+                <td class="muted" th:text="${a.clearedAt ?: '-'}"></td>
+            </tr>
+            <tr th:if="${alarms.content.isEmpty()}">
+                <td colspan="7" class="muted" style="text-align:center;">
+                    No alarms match this filter.
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        <p class="muted" style="margin-top:1rem;">
+            Page <span th:text="${alarms.page + 1}">1</span>
+            of <span th:text="${alarms.totalPages == 0 ? 1 : alarms.totalPages}">1</span>
+            (<span th:text="${alarms.totalElements}">0</span> alarms)
+            <a th:if="${alarms.page > 0}"
+               th:href="@{/admin/alarms(state=${state},kind=${kind},resource=${resource},page=${alarms.page - 1})}"
+               style="margin-left:1rem;">Previous</a>
+            <a th:if="${alarms.page + 1 < alarms.totalPages}"
+               th:href="@{/admin/alarms(state=${state},kind=${kind},resource=${resource},page=${alarms.page + 1})}"
+               style="margin-left:1rem;">Next</a>
+        </p>
+    </div>
+
+    <div class="card" style="margin-top:1rem;">
+        <strong>Per-site thresholds</strong>
+        <p class="muted">
+            A blank field disables that check. It is not zero: a ceiling of zero watts is a limit every
+            live site breaches permanently. Saving creates a site-specific row; "Use defaults" removes it.
+        </p>
+        <table>
+            <thead>
+            <tr>
+                <th>Resource</th>
+                <th>Status</th>
+                <th>Source</th>
+                <th>Limits</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="t : ${thresholds}">
+                <td th:text="${t.resource}"></td>
+                <td>
+                    <span class="badge ok" th:if="${t.isActive}">ACTIVE</span>
+                    <span class="badge off" th:unless="${t.isActive}">INACTIVE</span>
+                </td>
+                <td class="muted">
+                    <span th:if="${t.usingDefaults}">application defaults</span>
+                    <span th:unless="${t.usingDefaults}"
+                          th:text="${t.maxPower == null and t.minVoltage == null} ? 'both checks disabled' : 'site-specific'"></span>
+                </td>
+                <td>
+                    <form th:action="@{/admin/alarms/thresholds/{id}(id=${t.accessKeyId})}" method="post"
+                          style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                        <label class="muted" for="maxPower-${t.accessKeyId}">Max W</label>
+                        <input th:id="'maxPower-' + ${t.accessKeyId}" type="number" step="any" min="0"
+                               name="maxPower" th:value="${t.maxPower}"
+                               style="width:7rem; padding:0.35rem; border:1px solid #c9d3db; border-radius:6px;"/>
+                        <label class="muted" for="minVoltage-${t.accessKeyId}">Min V</label>
+                        <input th:id="'minVoltage-' + ${t.accessKeyId}" type="number" step="any" min="0"
+                               name="minVoltage" th:value="${t.minVoltage}"
+                               style="width:6rem; padding:0.35rem; border:1px solid #c9d3db; border-radius:6px;"/>
+                        <button type="submit" class="btn"
+                                style="padding:0.35rem 0.8rem; font-size:0.8rem;">Save</button>
+                    </form>
+                    <form th:unless="${t.usingDefaults}"
+                          th:action="@{/admin/alarms/thresholds/{id}/reset(id=${t.accessKeyId})}"
+                          method="post" style="margin-top:0.4rem;"
+                          onsubmit="return confirm('Reset this site to the application defaults?');">
+                        <button type="submit" class="btn"
+                                style="background:#27476b; padding:0.3rem 0.7rem; font-size:0.8rem;">Use defaults</button>
+                    </form>
+                </td>
+            </tr>
+            <tr th:if="${thresholds.isEmpty()}">
+                <td colspan="4" class="muted" style="text-align:center;">No registered sites yet.</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>

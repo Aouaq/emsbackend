@@ -9,6 +9,7 @@ import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
 /**
@@ -45,6 +46,10 @@ data class AccessKeySeedProperties(
  * from ones added through the admin API.
  */
 @Component
+// Explicit, because [AlarmThresholdSeeder] must run after this one and an unordered
+// runner is lowest precedence - leaving this bare would have put it last, so thresholds
+// would be seeded for keys that did not exist yet and skipped on every fresh database.
+@Order(50)
 @EnableConfigurationProperties(AccessKeySeedProperties::class)
 class AccessKeySeeder(
     private val adminService: AdminService,

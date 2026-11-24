@@ -28,5 +28,23 @@ data class AccessKeyResponse(
     @field:Schema(description = "Creation timestamp (UTC)")
     val createdAt: Instant,
     @field:Schema(description = "Last update timestamp (UTC)")
-    val updatedAt: Instant
+    val updatedAt: Instant,
+
+    // The **caller's own** view of this site, from site_preferences. Null unless
+    // they have set something, and never another user's values: an admin and a
+    // client looking at the same site each see their own. Carried here so the admin
+    // listing is as complete as the client one, which is what lets the app use a
+    // single mapper for both shapes.
+    @field:Schema(description = "What the caller calls this site", nullable = true)
+    val name: String? = null,
+    @field:Schema(description = "Picked region, e.g. Marrakech,Marrakech-Safi,Morocco", nullable = true)
+    val region: String? = null,
+    @field:Schema(description = "Free-text street or locality, e.g. Targa", nullable = true)
+    val addressDetail: String? = null,
+    @field:Schema(description = "Map pin latitude", nullable = true)
+    val latitude: Double? = null,
+    @field:Schema(description = "Map pin longitude", nullable = true)
+    val longitude: Double? = null,
+    @field:Schema(description = "Object-store URL of the site photo", nullable = true)
+    val imageUrl: String? = null
 )

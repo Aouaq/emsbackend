@@ -186,6 +186,56 @@ This file records every assumption or deviation from the v1 specification.
   milliseconds but reduce that flag to a guess, so it should only be done together with
   a durable outbox the client can query.
 
+## Mail transport is pluggable
+
+- `MailService` decides what an email says and whether to send at all; `MailTransport`
+  (`service/mail/`) owns the wire. `app.mail.transport` selects one implementation:
+  `smtp` (the default, Spring's `JavaMailSender`) or `brevo` (an HTTPS POST to Brevo's
+  transactional API). Exactly one bean matches and one always does, so `MailService`'s
+  constructor is always satisfiable and `MailDelivery` means the same thing either way.
+- The reason is that Render blocks outbound traffic to ports 25, 465 and 587, and a
+  blocked port is worse than a closed one: the connect does not fail, it hangs for the
+  full `connectiontimeout` and then reports `SocketTimeoutException`. Every registration
+  on the deployed instance returned 201 with `verificationCodeSent: false` after 20s. No
+  `spring.mail` value changes that, because nothing is answering. HTTPS is not blocked
+  anywhere, because blocking it would break everything else.
+- `BrevoMailTransport` pins `JdkClientHttpRequestFactory` rather than accepting
+  `RestClient`'s `SimpleClientHttpRequestFactory` default. That one wraps
+  `HttpURLConnection`, which on a **401** goes looking for an `Authenticator` and hands
+  back an empty error stream - so the response body is lost on precisely the most likely
+  failure, a wrong API key, reducing the log to "HTTP 401" with nothing after it. Caught
+  by `BrevoMailTransportTest`, which is why that test asserts on the body and not just
+  the status. It also pins HTTP/1.1: one small POST per email gains nothing measurable
+  from HTTP/2, and the JDK client's cleartext upgrade is one more thing to negotiate.
+- The provider's error body passes through verbatim rather than parsed. Brevo answers a
+  rejection with `{"code":..,"message":..}` and names an unverified sender, an exhausted
+  quota and a bad key individually, so there is nothing to add - and a proxy's HTML error
+  page survives the same path instead of failing to parse. `MailTransportException`
+  carries no stack trace: a rejected send is an operational event, not a defect, and the
+  160 frames were burying the one line that said why. Faults below the application - a
+  connect timeout, DNS, TLS - propagate as themselves with their traces intact.
+- Port **2525** is worth trying before reaching for the API. Render's policy names only
+  25, 465 and 587, and Brevo supports 2525 on `smtp-relay.brevo.com`, so `transport=smtp`
+  with `SPRING_MAIL_PORT=2525` may work with no code involved. The exception type tells
+  you which wall you hit: `SocketTimeoutException` is egress filtering, while reaching
+  `AuthenticationFailedException` means the packets got out and only the credentials are
+  wrong.
+
+## The mail health indicator is off by default
+
+- `management.health.mail.enabled` defaults to `false`. The probe opens an SMTP
+  connection on every call to `/actuator/health`, so wherever SMTP is unreachable it
+  waits out the entire connect timeout and then reports the whole service `503`.
+  Measured on Render: 22.9s and 503, with the framework itself logging
+  `contributor (mail) took 20030ms to respond`. A mail outage reading as a dead instance
+  is how a restart loop begins, and a platform health check pointed at that path would
+  act on it.
+- Little is lost. It only ever proved a TCP connection was possible, never that a message
+  would be accepted, while `verificationCodeSent` already reports real delivery per
+  request. `APP_MAIL_HEALTH_ENABLED=true` restores it where the relay is reachable and
+  the signal is wanted. `/actuator/health/readiness` excludes it by design and is the
+  better target for a platform probe - `compose.yaml` already uses it.
+
 ## Authentication and account lifecycle
 
 - A disabled account is checked after credential verification and returns
@@ -259,6 +309,49 @@ This file records every assumption or deviation from the v1 specification.
 - Key replacement keeps existing client links but invalidates the old claim key.
   Admin key updates, replacement and deletion evict both the account-access
   cache for the affected resource.
+
+## Fleet alarms for administrators
+
+- Admin alarm access is separate from the client feed. `GET /api/admin/alarms`
+  sees every registered site, including inactive ones, because limits are tuned
+  per installation and a site is often configured before it is handed to a client.
+  The client feed is unchanged and still resolves alarms through
+  `user_access_keys`.
+- The page at `/admin/alarms` defaults to open alarms only. The API leaves
+  `active` unset as "both", which is the useful default for a caller that has not
+  chosen a state.
+- An unknown `resource` filter returns an empty page, not 404: it is a filter, and
+  a typo should not look like a broken endpoint. An unknown access key on a
+  threshold update or reset is a 404, because that is a write against a specific
+  row.
+- Thresholds have three states, and they are deliberately distinct: no row means
+  the application defaults, a row with a null limit means that check is disabled,
+  and a numeric limit is the site's own. `DELETE .../thresholds/{accessKeyId}`
+  removes the row to return to the defaults.
+- A stored null previously did nothing: `SiteMonitorService` and
+  `AlarmService.thresholdsFor` both fell back to the defaults for a null field,
+  while the request DTO and the docs said null disables the check. They now read
+  a stored null as "disabled", so a blank field on the admin page has the effect
+  it claims.
+- Threshold changes are audited as `ALARM_THRESHOLDS_UPDATED` and
+  `ALARM_THRESHOLDS_RESET` with the resource in `resource` and the saved limits in
+  `details`. A reset with no stored row writes no event, because nothing changed.
+- `GET /api/admin/stats` gained an `alarms` block (`open`, `overPower`,
+  `underVoltage`, `total`) so the dashboard can link to the alarm list without a
+  second request.
+- No migration was needed: `alarms` already indexes `(access_key_id, kind)` and
+  the partial open-alarm index, and the list is a Specification over those
+  columns. Page size is capped at 100 like every other admin list.
+- There is no manual "clear alarm" action. Alarms are derived from readings;
+  clearing one by hand would make the table disagree with the site until the next
+  sweep. The page shows `lastSweepAt` and `monitoringEnabled` instead.
+- The mobile app needed the fleet changes live, not on a pull-to-refresh, so
+  `GET /api/admin/alarms/stream` was added later as an SSE endpoint for
+  administrators. It reuses the client stream's emitter registry and payload, and
+  `AlarmStreamService` now fans a crossing out to the site's linked clients plus
+  every enabled admin. The client endpoint is unchanged and stays link-scoped.
+  The original "no admin SSE" decision applied to the server-rendered page, which
+  polls on navigation and had no reason to hold a connection open.
 
 ## Emoncms access
 

@@ -12,9 +12,13 @@ import ma.electricwave.dto.AccessKeyUpdateRequest
 import ma.electricwave.dto.ClientResponse
 import ma.electricwave.dto.LinkedClientResponse
 import ma.electricwave.dto.ReplaceEmoncmsKeyRequest
+import ma.electricwave.security.JwtService
 import ma.electricwave.service.AdminService
+import ma.electricwave.service.MeService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
+import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -60,7 +64,11 @@ class AdminKeyController(private val adminService: AdminService) {
         ApiResponse(responseCode = "403", description = "Caller is not an admin")
     )
     @GetMapping("/keys")
-    fun listKeys(): List<AccessKeyResponse> = adminService.listKeys()
+    fun listKeys(@AuthenticationPrincipal jwt: Jwt): List<AccessKeyResponse> =
+        // The caller's id, so the listing carries their own name and location for each
+        // site. An admin is not linked to the sites they manage, so this is the only
+        // listing that can show them theirs.
+        adminService.listKeys(userId(jwt))
 
     @Operation(summary = "Get a registered Emoncms account")
     @ApiResponses(
@@ -172,4 +180,7 @@ class AdminKeyController(private val adminService: AdminService) {
     )
     @GetMapping("/clients")
     fun listClients(): List<ClientResponse> = adminService.listClients()
+
+    private fun userId(jwt: Jwt): Long =
+        MeService.userIdFromClaim(jwt.getClaim<Any>(JwtService.USER_ID_CLAIM))
 }

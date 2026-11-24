@@ -289,6 +289,10 @@ class AdminManagementIntegrationTest : ApiTestSupport() {
             .andExpect(jsonPath("$.users.total").isNumber)
             .andExpect(jsonPath("$.accessKeys.total").isNumber)
             .andExpect(jsonPath("$.links").isNumber)
+            .andExpect(jsonPath("$.alarms.open").isNumber)
+            .andExpect(jsonPath("$.alarms.overPower").isNumber)
+            .andExpect(jsonPath("$.alarms.underVoltage").isNumber)
+            .andExpect(jsonPath("$.alarms.total").isNumber)
     }
 
     @Test

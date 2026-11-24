@@ -54,6 +54,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Empty in development, where Redis is a sibling container on a private network
+      # and nothing else can reach it. Required in any deployment that publishes a port
+      # or shares a host: this instance holds every refresh token, so an unauthenticated
+      # Redis is a way to mint sessions for the whole fleet, not merely a cache to warm.
+      password: ${REDIS_PASSWORD:}
 
   # ----------------------------------------------------------------------------
   # Mail (SMTP) - start-up safe: app.mail.enabled=false skips sending entirely
@@ -109,6 +114,19 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    # Off by default. The probe opens an SMTP connection on every call to
+    # /actuator/health, so wherever SMTP is blocked it waits out the whole 20s connect
+    # timeout and then reports the entire service 503 - a mail outage reads as a dead
+    # instance, which is how a restart loop begins. Measured on Render: 22.9s and 503,
+    # with the framework itself logging "contributor (mail) took 20030ms to respond".
+    #
+    # Little is lost. It proved only that a TCP connection was possible, never that a
+    # message would be accepted, while RegisterResponse.verificationCodeSent already
+    # reports real delivery per request. Set APP_MAIL_HEALTH_ENABLED=true to restore it
+    # where the relay is reachable and the signal is wanted.
+    mail:
+      enabled: ${APP_MAIL_HEALTH_ENABLED:false}
 
 # =============================================================================
 # Application specific settings
@@ -177,6 +195,65 @@ app:
   mail:
     enabled: ${APP_MAIL_ENABLED:false}
     from: ${APP_MAIL_FROM:no-reply@electricwave.local}
+
+    # Which transport carries the message.
+    #   smtp  - Spring's JavaMailSender over spring.mail.* above. The default, and what
+    #           a developer machine uses.
+    #   brevo - POST to Brevo's HTTP API. Required on platforms that block outbound
+    #           SMTP: Render drops traffic to 25/465/587, so a JavaMail connect there
+    #           hangs for the full 20s connect timeout and then fails, per send.
+    # Only one transport bean exists at a time; see service/mail/MailTransport.kt.
+    transport: ${APP_MAIL_TRANSPORT:smtp}
+
+    # Used only when transport=brevo, which refuses to start without a key. This is the
+    # API key, not the separate SMTP key Brevo issues for its relay.
+    api-key: ${APP_MAIL_API_KEY:}
+    api-base-url: ${APP_MAIL_API_BASE_URL:https://api.brevo.com/v3}
+
+  # ----------------------------------------------------------------------------
+  # Site monitoring
+  # ----------------------------------------------------------------------------
+  # Polls every registered access key's Emoncms feeds and records threshold
+  # crossings, so alarms exist whether or not anyone has the app open.
+  #
+  # This is the one place the backend reads Emoncms. The gateway that used to
+  # proxy reads for the app was removed on purpose and is not coming back; a
+  # server cannot watch data it is not allowed to see, which is a different
+  # argument from proxying requests a client could make itself.
+  #
+  # NOTE: a sweep only runs while the instance is awake. On a host that sleeps
+  # when idle the symptom is an alarm list that stays empty, which looks exactly
+  # like nothing being wrong. Keep something polling the health endpoint.
+  monitor:
+    enabled: ${APP_MONITOR_ENABLED:true}
+    interval: ${APP_MONITOR_INTERVAL:PT30S}
+    emoncms-base-url: ${APP_MONITOR_EMONCMS_BASE_URL:http://electricwave.ma/energymonitoring}
+
+    # Fleet-wide fallbacks for a site with no row of its own. Deliberately
+    # permissive: a default is what an unconfigured site is judged by, and a
+    # strict one means every newly registered site alarms on day one and
+    # teaches whoever sees it to ignore the alarms.
+    #
+    # 230 V was the original value, taken from an example script, and it was
+    # wrong for this fleet in the worst way - measured live, sites run between
+    # 215 V and 233 V, so the "default" sat in the middle of normal operation.
+    # Tightening past this belongs in a per-site row, not here.
+    default-max-power: ${APP_MONITOR_MAX_POWER:142000}
+    default-min-voltage: ${APP_MONITOR_MIN_VOLTAGE:210}
+
+    # Readings older than this are not judged at all. A site that stopped
+    # reporting still returns its last value, and an alarm latched on a
+    # months-old number could never clear.
+    stale-after: ${APP_MONITOR_STALE_AFTER:PT15M}
+
+    # How far past its limit a reading must come back before the alarm clears,
+    # as a fraction of the limit. Without it a site sitting *at* its threshold
+    # crosses in both directions every sweep: measured against the real fleet,
+    # capteur3tc01kammah produced 25 alarm episodes in 64 minutes at 227-230 V
+    # against a 230 V floor. 1% is comfortably past the observed jitter of ~2 V
+    # and still clears a genuine recovery.
+    clear-deadband: ${APP_MONITOR_CLEAR_DEADBAND:0.01}
+    concurrency: ${APP_MONITOR_CONCURRENCY:4}
 
   # DEV ONLY: return the verification code in API responses when mail is off.
   auth:

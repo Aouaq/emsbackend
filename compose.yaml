@@ -7,6 +7,16 @@ volumes:
   # reattached on recreate, so the data survives everything short of `down -v`.
   postgres-data:
 
+  # Redis is not a cache here. It is the only store for refresh tokens, so losing it
+  # signs out every user on the fleet at once - a thirty-day session ended by a restart
+  # of a container nobody thought held anything. That happened: a restart invalidated
+  # every refresh token, each app discovered it at the next fifteen-minute expiry, and
+  # the only way back in was a Google sign-in that was itself broken.
+  #
+  # Verification codes and rate-limit counters live here too; those are cheap to lose.
+  # The refresh tokens are not.
+  redis-data:
+
 services:
   postgres:
     image: 'postgres:16'
@@ -26,6 +36,13 @@ services:
 
   redis:
     image: 'redis:7'
+    # Append-only, not the default snapshots. The stock `save` rules write at best every
+    # sixty seconds and only after enough writes have piled up, so a restart loses
+    # whatever arrived since - and for a refresh token "lost" means the user is signed
+    # out. The AOF is written per second of writes and replayed on boot.
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - 'redis-data:/data'
     ports:
       - '6379'
     healthcheck:

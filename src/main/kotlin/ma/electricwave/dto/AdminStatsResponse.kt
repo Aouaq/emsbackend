@@ -9,7 +9,9 @@ data class AdminStatsResponse(
     @field:Schema(description = "Access-key totals")
     val accessKeys: AccessKeyStats,
     @field:Schema(description = "Number of client-to-key links", example = "12")
-    val links: Long
+    val links: Long,
+    @field:Schema(description = "Alarm totals")
+    val alarms: AlarmStats
 ) {
     @Schema(description = "User counts")
     data class UserStats(
@@ -33,5 +35,17 @@ data class AdminStatsResponse(
         val active: Long,
         @field:Schema(description = "Inactive accounts", example = "1")
         val inactive: Long
+    )
+
+    @Schema(description = "Alarm counts")
+    data class AlarmStats(
+        @field:Schema(description = "Open alarms", example = "2")
+        val open: Long,
+        @field:Schema(description = "Open over-power alarms", example = "1")
+        val overPower: Long,
+        @field:Schema(description = "Open under-voltage alarms", example = "1")
+        val underVoltage: Long,
+        @field:Schema(description = "All recorded alarms, open and cleared", example = "40")
+        val total: Long
     )
 }

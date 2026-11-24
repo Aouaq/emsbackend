@@ -1,13 +1,17 @@
 package ma.electricwave.web
 
 import jakarta.validation.Valid
+import ma.electricwave.domain.AlarmKind
 import ma.electricwave.domain.Role
 import ma.electricwave.dto.AccessKeyRequest
+import ma.electricwave.dto.AlarmThresholdRequest
 import ma.electricwave.dto.ReplaceEmoncmsKeyRequest
 import ma.electricwave.exception.ApiException
+import ma.electricwave.service.AdminAlarmService
 import ma.electricwave.service.AdminAuditService
 import ma.electricwave.service.AdminService
 import ma.electricwave.service.AdminUserService
+import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
@@ -25,7 +29,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes
 class AdminPageController(
     private val adminService: AdminService,
     private val adminUserService: AdminUserService,
-    private val adminAuditService: AdminAuditService
+    private val adminAuditService: AdminAuditService,
+    private val adminAlarmService: AdminAlarmService
 ) {
 
     @GetMapping
@@ -209,6 +214,80 @@ class AdminPageController(
         return "admin/clients"
     }
 
+    @GetMapping("/alarms")
+    fun alarms(
+        @RequestParam(defaultValue = "open") state: String,
+        @RequestParam(required = false) kind: AlarmKind?,
+        @RequestParam(required = false) resource: String?,
+        @RequestParam(defaultValue = "0") page: Int,
+        model: Model
+    ): String {
+        // Only the three documented values are meaningful; anything else falls back to
+        // the actionable default rather than silently showing every alarm ever recorded.
+        val normalizedState = when (state) {
+            "cleared", "all" -> state
+            else -> "open"
+        }
+        val active = when (normalizedState) {
+            "open" -> true
+            "cleared" -> false
+            else -> null
+        }
+        val normalizedResource = resource?.trim()?.takeIf { it.isNotEmpty() }
+
+        model.addAttribute("title", "Alarms")
+        model.addAttribute("alarms", adminAlarmService.list(active, kind, normalizedResource, page, 20))
+        model.addAttribute("summary", adminAlarmService.summary())
+        model.addAttribute("thresholds", adminAlarmService.thresholds())
+        model.addAttribute("state", normalizedState)
+        model.addAttribute("kind", kind?.name)
+        model.addAttribute("resource", normalizedResource)
+        return "admin/alarms"
+    }
+
+    @PostMapping("/alarms/thresholds/{id}")
+    fun updateAlarmThresholds(
+        @PathVariable id: Long,
+        @RequestParam(required = false) maxPower: String?,
+        @RequestParam(required = false) minVoltage: String?,
+        authentication: Authentication,
+        redirectAttributes: RedirectAttributes
+    ): String = try {
+        adminAlarmService.updateThresholds(
+            id,
+            AlarmThresholdRequest(
+                maxPower = thresholdValue(maxPower, "Max power"),
+                minVoltage = thresholdValue(minVoltage, "Min voltage")
+            ),
+            authentication.name
+        )
+        redirectAttributes.addFlashAttribute("message", "Alarm thresholds saved.")
+        "redirect:/admin/alarms"
+    } catch (ex: ApiException) {
+        redirectAttributes.addFlashAttribute(
+            "errorMessage",
+            ex.message ?: "Unable to save alarm thresholds"
+        )
+        "redirect:/admin/alarms"
+    }
+
+    @PostMapping("/alarms/thresholds/{id}/reset")
+    fun resetAlarmThresholds(
+        @PathVariable id: Long,
+        authentication: Authentication,
+        redirectAttributes: RedirectAttributes
+    ): String = try {
+        adminAlarmService.resetThresholds(id, authentication.name)
+        redirectAttributes.addFlashAttribute("message", "Alarm thresholds reset to the defaults.")
+        "redirect:/admin/alarms"
+    } catch (ex: ApiException) {
+        redirectAttributes.addFlashAttribute(
+            "errorMessage",
+            ex.message ?: "Unable to reset alarm thresholds"
+        )
+        "redirect:/admin/alarms"
+    }
+
     @GetMapping("/audit")
     fun audit(
         @RequestParam(defaultValue = "0") page: Int,
@@ -217,5 +296,28 @@ class AdminPageController(
         model.addAttribute("title", "Audit Log")
         model.addAttribute("audit", adminAuditService.list(null, page, 20))
         return "admin/audit"
+    }
+
+    /**
+     * Blank means "disable this check", so it must become null rather than 0 - a ceiling
+     * of zero watts is a limit every live site breaches permanently.
+     */
+    private fun thresholdValue(raw: String?, field: String): Double? {
+        val text = raw?.trim()
+        if (text.isNullOrEmpty()) return null
+        val value = text.toDoubleOrNull()
+            ?: throw ApiException(
+                HttpStatus.BAD_REQUEST,
+                "$field must be a number",
+                "VALIDATION_FAILED"
+            )
+        if (!value.isFinite() || value < 0) {
+            throw ApiException(
+                HttpStatus.BAD_REQUEST,
+                "$field must be a non-negative number",
+                "VALIDATION_FAILED"
+            )
+        }
+        return value
     }
 }
