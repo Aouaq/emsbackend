@@ -17,6 +17,8 @@ import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException
 import org.springframework.web.method.annotation.HandlerMethodValidationException
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.servlet.resource.NoResourceFoundException
@@ -102,6 +104,14 @@ class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException::class)
     fun handleAccessDenied(ex: AccessDeniedException): ProblemDetail =
         problem(HttpStatus.FORBIDDEN, "Access denied", "FORBIDDEN")
+
+    @ExceptionHandler(AsyncRequestNotUsableException::class, AsyncRequestTimeoutException::class)
+    fun handleAsyncLifecycle(ex: Exception) {
+        // Normal SSE lifecycle: client disconnected or the emitter's designed timeout fired.
+        // Log at DEBUG only — these are not errors, and trying to write a response body here
+        // would fail (the response is already pinned to text/event-stream).
+        log.debug("SSE connection ended: {}", ex.message)
+    }
 
     @ExceptionHandler(Exception::class)
     fun handleUnexpected(ex: Exception): ProblemDetail {

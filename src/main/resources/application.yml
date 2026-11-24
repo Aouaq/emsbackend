@@ -100,6 +100,15 @@ spring:
     compose:
       enabled: ${DOCKER_COMPOSE_ENABLED:true}
 
+spring:
+  task:
+    scheduling:
+      pool:
+        # AlarmStreamService sends heartbeats every 20 s and SiteMonitorService can block
+        # up to 25 s on pool.invokeAll. Both share the scheduler, so a heartbeat can slip
+        # to ~45 s against nginx's 60 s proxy_read_timeout. Two threads removes that risk.
+        size: 2
+
 server:
   port: ${SERVER_PORT:8082}
   tomcat:

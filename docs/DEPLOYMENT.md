@@ -87,6 +87,29 @@ that address. The proxy must set `X-Forwarded-For`, and `APP_TRUSTED_PROXIES` mu
 it — otherwise every request appears to come from the proxy and the rate limiter buckets
 the entire internet together.
 
+A committed nginx config lives at `deploy/nginx/dev.aouaq.site.conf`. Copy it to
+`/etc/nginx/sites-available/`, symlink to `sites-enabled/`, then reload nginx.
+
+### SSE alarm stream requires buffering disabled
+
+nginx buffers proxied responses by default (`proxy_buffering on`). For normal endpoints
+that is harmless; for the SSE stream at `/api/me/alarms/stream` and
+`/api/admin/alarms/stream` it means heartbeat bytes sit in the proxy buffer and never
+reach the client. The client's read timeout fires, it disconnects, and the reconnect loop
+starts hammering `/api/auth/refresh` into the rate limiter.
+
+Two independent protections are already in place, so both would have to be removed for
+this to regress:
+
+1. **Response header** — the backend sets `X-Accel-Buffering: no` on every stream
+   response. nginx honours this header to disable buffering for that one response.
+2. **Location block** — `deploy/nginx/dev.aouaq.site.conf` has a dedicated
+   `location ~ ^/api/(me|admin)/alarms/stream$` block with `proxy_buffering off` and
+   `proxy_read_timeout 1h` (the emitter lifetime is 30 min; nginx's default 60 s is
+   shorter than the rollover interval).
+
+If the stream ever stops working again, check these two things first.
+
 ## Rolling back
 
 Images are versioned, so a rollback is the previous tag:

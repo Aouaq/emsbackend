@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import ma.electricwave.domain.AlarmKind
 import ma.electricwave.dto.AdminAlarmResponse
@@ -86,8 +87,11 @@ class AdminAlarmController(
         ApiResponse(responseCode = "403", description = "Caller is not an admin")
     )
     @GetMapping("/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
-    fun stream(@AuthenticationPrincipal jwt: Jwt): SseEmitter =
-        streams.open(userId(jwt))
+    fun stream(@AuthenticationPrincipal jwt: Jwt, response: HttpServletResponse): SseEmitter {
+        response.setHeader("X-Accel-Buffering", "no")
+        response.setHeader("Cache-Control", "no-cache, no-transform")
+        return streams.open(userId(jwt))
+    }
 
     @Operation(
         summary = "List per-site alarm thresholds",
