@@ -100,7 +100,6 @@ spring:
     compose:
       enabled: ${DOCKER_COMPOSE_ENABLED:true}
 
-spring:
   task:
     scheduling:
       pool:
